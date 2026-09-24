@@ -40,32 +40,54 @@ struct ListDrag {
 };
 ListDrag g_list_drag;
 
+// A finger sliding over an sMenu (Start menu, Yes/No, multichoice): the caret
+// follows the item under the finger; lifting on an item confirms it.
+struct MenuDrag {
+    bool active = false;
+    std::uint8_t window = 0xFF;
+    int item = -1;
+};
+MenuDrag g_menu_drag;
+
+int menu_item_at(const MenuState& m, float nx, float ny) {
+    for (int i = m.min; i <= m.max; ++i)
+        if (m.item(i).contains(nx, ny, 1.0f)) return i;
+    return -1;
+}
+
+// Verified navigation to item `i` (cursor read back from sMenu), then A when
+// `confirm`. Starting replaces any running menu macro, which is safe: every
+// navigation step re-reads the live cursor.
+void menu_select(Core& core, const SceneState& s, int i, bool confirm) {
+    const MenuState& m = s.menu;
+    const bool grid = m.grid;
+    const int columns = m.columns;
+    const bool wrap = m.wrap;
+    const int min = m.min, max = m.max;
+    auto read = [](const FrameCtx& ctx) {
+        return ctx.scene.menu.live ? static_cast<int>(ctx.mem.s8(sMenu + 2)) : -9999;
+    };
+    auto choose = [grid, columns, wrap, min, max](int cur, int target) -> std::uint16_t {
+        if (grid && columns > 0) {
+            if (cur / columns != target / columns)
+                return target / columns < cur / columns ? k::kGbaKeyUp : k::kGbaKeyDown;
+            return target % columns < cur % columns ? k::kGbaKeyLeft : k::kGbaKeyRight;
+        }
+        return vertical_toward(cur, target, wrap, min, max);
+    };
+    std::vector<Step> steps{step_navigate(read, i, choose)};
+    if (confirm) steps.push_back(step_press(k::kGbaKeyA));
+    core.macro.start(confirm ? "menu:select" : "menu:hover", std::move(steps), s.signature());
+}
+
 }  // namespace
 
 bool menus_tap(Core& core, const SceneState& s, float nx, float ny) {
     if (s.menu.live) {
         const MenuState& m = s.menu;
-        for (int i = m.min; i <= m.max; ++i) {
-            const Rect r = m.item(i);
-            if (!r.contains(nx, ny, 1.0f)) continue;
-            const bool grid = m.grid;
-            const int columns = m.columns;
-            const bool wrap = m.wrap;
-            const int min = m.min, max = m.max;
-            auto read = [](const FrameCtx& ctx) {
-                return ctx.scene.menu.live ? static_cast<int>(ctx.mem.s8(sMenu + 2)) : -9999;
-            };
-            auto choose = [grid, columns, wrap, min, max](int cur, int target) -> std::uint16_t {
-                if (grid && columns > 0) {
-                    if (cur / columns != target / columns)
-                        return target / columns < cur / columns ? k::kGbaKeyUp : k::kGbaKeyDown;
-                    return target % columns < cur % columns ? k::kGbaKeyLeft : k::kGbaKeyRight;
-                }
-                return vertical_toward(cur, target, wrap, min, max);
-            };
-            core.macro.start("menu:select", {step_navigate(read, i, choose),
-                                             step_press(k::kGbaKeyA)},
-                             s.signature());
+        const int i = menu_item_at(m, nx, ny);
+        if (i >= 0) {
+            menu_select(core, s, i, true);
             record_action(core.frame, "tap", scene_name(s.kind), "menu-item", nx, ny, i);
             return true;
         }
@@ -169,11 +191,39 @@ bool menus_drag(Core& core, const SceneState& s, const k::Gesture& g) {
             g_list_drag.active = true;
             g_list_drag.task = s.list.task;
             g_list_drag.last_ny = sy;
-        } else if (s.menu.live && s.menu.window_rect.contains(sx, sy)) {
-            return true;  // a drag inside a static menu does nothing
+        } else if (s.menu.live && s.menu.window_rect.contains(sx, sy, 2.0f)) {
+            g_menu_drag = {true, s.menu.window, -1};
         } else {
+            g_menu_drag = {};
             return false;
         }
+    }
+    if (g_menu_drag.active) {
+        const bool ending = g.kind == k::GestureKind::DragEnd ||
+                            g.kind == k::GestureKind::Cancel;
+        if (!s.menu.live || s.menu.window != g_menu_drag.window) {
+            g_menu_drag = {};
+            return true;
+        }
+        const int i = menu_item_at(s.menu, nx, ny);
+        if (ending) {
+            g_menu_drag = {};
+            if (g.kind == k::GestureKind::DragEnd && i >= 0) {
+                menu_select(core, s, i, true);
+                record_action(core.frame, "drag", scene_name(s.kind), "menu-slide-select",
+                              nx, ny, i);
+            } else {
+                record_action(core.frame, "drag", scene_name(s.kind), "menu-slide-off",
+                              nx, ny, 0);
+            }
+            return true;
+        }
+        if (i >= 0 && i != g_menu_drag.item) {
+            g_menu_drag.item = i;
+            if (i != s.menu.cursor || core.macro.busy()) menu_select(core, s, i, false);
+            record_action(core.frame, "drag", scene_name(s.kind), "menu-hover", nx, ny, i);
+        }
+        return true;
     }
     if (!g_list_drag.active) return false;
     if (g.kind == k::GestureKind::DragEnd || g.kind == k::GestureKind::Cancel) {

@@ -215,10 +215,11 @@ void record_action(std::uint64_t frame, const char* gesture, const char* scene,
 
 void record_unclaimed(const SceneState& s, const char* gesture) {
     char key[160];
-    std::snprintf(key, sizeof(key), "%s|cb2=%08X|ctl=%s|menu=%d|list=%d|text=%d|%s",
+    std::snprintf(key, sizeof(key), "%s|cb2=%08X|ctl=%s|menu=%d|list=%d|text=%d|wait=%d|%s",
                   scene_name(s.kind), s.cb2, battle_control_name(s.battle.control),
                   s.menu.live ? 1 : 0, s.list.live ? 1 : 0,
-                  (s.text.waiting || s.text.printing) ? 1 : 0, gesture);
+                  (s.text.waiting || s.text.printing) ? 1 : 0,
+                  s.text.script_wait_button ? 1 : 0, gesture);
     std::lock_guard<std::mutex> lk(g_ring_m);
     ++g_unclaimed[key];
 }
@@ -526,20 +527,21 @@ int tcp_command(const char* request, void (*write)(void*, const char*, std::size
     auto emit = [&] { write(ctx, out.data(), out.size()); };
     const std::uint64_t since = static_cast<std::uint64_t>(req.integer("since", 0));
     const std::size_t limit = static_cast<std::size_t>(req.integer("limit", 256));
-    char buf[512];
+    char buf[1024];
     if (cmd == "emerald_touch_status") {
         const SceneState& s = core().scene;
         std::snprintf(buf, sizeof(buf),
             "{\"ok\":true,\"frame\":%llu,\"scene\":\"%s\",\"cb2\":\"0x%08X\","
             "\"field_free\":%s,\"menu\":%s,\"menu_window\":%d,\"menu_cursor\":%d,"
             "\"list\":%s,\"list_task\":%d,\"list_selected\":%d,\"list_scroll\":%d,"
-            "\"text_waiting\":%s,\"text_printing\":%s,\"dialogue_box\":%s,\"start_menu\":%s,"
+            "\"text_waiting\":%s,\"text_printing\":%s,\"script_wait\":%s,\"dialogue_box\":%s,\"start_menu\":%s,"
             "\"battle_control\":\"%s\",\"macro\":\"%s\",\"native_view\":%s,\"mobile\":%s}",
             static_cast<unsigned long long>(s.frame), scene_name(s.kind), s.cb2,
             s.field.free ? "true" : "false", s.menu.live ? "true" : "false",
             s.menu.window, s.menu.cursor, s.list.live ? "true" : "false", s.list.task,
             s.list.selected, s.list.scroll, s.text.waiting ? "true" : "false",
-            s.text.printing ? "true" : "false", s.text.dialogue_box ? "true" : "false",
+            s.text.printing ? "true" : "false", s.text.script_wait_button ? "true" : "false",
+            s.text.dialogue_box ? "true" : "false",
             s.start_menu ? "true" : "false",
             battle_control_name(s.battle.control),
             core().macro.busy() ? core().macro.label().c_str() : "",

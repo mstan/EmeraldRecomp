@@ -329,7 +329,13 @@ SceneState classify(const Mem& m, std::uint64_t frame) {
             if (s.text.window == 0xFF) s.text.window = m.u8(p + off::kTextPrinterWindow);
         }
     }
+    // waitbuttonpress: the global script context is running natively in
+    // WaitForAorBPress. StopScript (script.c) resets `mode` but leaves
+    // `nativePtr`, so the pointer alone stays stale after the script ends
+    // and would make every later overworld tap an A press.
     s.text.script_wait_button =
+        m.u8(addr::sGlobalScriptContext + 1) == 2 /* SCRIPT_MODE_NATIVE */ &&
+        m.u8(addr::sGlobalScriptContextStatus) != 2 /* CONTEXT_SHUTDOWN */ &&
         (m.u32(addr::sGlobalScriptContext + 4) & ~1u) == fn::WaitForAorBPress;
 
     // sMenu-driven menus. The field Start menu is the one sMenu user that

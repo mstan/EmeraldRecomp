@@ -63,7 +63,7 @@ def free_port():
 
 
 class Game:
-    def __init__(self, args, name):
+    def __init__(self, args, name, state=None):
         self.root = args.output / name
         self.root.mkdir(parents=True, exist_ok=True)
         exe = self.root / args.exe.name
@@ -102,8 +102,8 @@ class Game:
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.1)
-        self.args_state = args.state
-        self.c.call("savestate_load", path=str(args.state))
+        self.args_state = state or args.state
+        self.c.call("savestate_load", path=str(self.args_state))
         self.frames(2)
 
     # ── primitives ───────────────────────────────────────────────────────
@@ -377,6 +377,73 @@ def scenario_queued_tap(g):
     return {"decisions": decisions[-4:]}
 
 
+SCRIPT_CONTEXT = 0x03000E40         # sGlobalScriptContext: mode +1, nativePtr +4
+WAIT_FOR_A_OR_B_PRESS = 0x0809AC98
+
+
+def nearby_npc(g, max_dx=6, max_dy=3):
+    """Offset (dx, dy) of the nearest active non-player object event in view."""
+    me = g.u8(PLAYER_AVATAR + 5)
+    px, py = g.player()
+    best = None
+    for i in range(16):
+        if i == me:
+            continue
+        raw = g.mem("ewram", OBJECT_EVENTS + i * 0x24, 0x24)
+        if not raw[0] & 1:                            # active
+            continue
+        x, y = struct.unpack_from("<hh", raw, 0x10)
+        dx, dy = x - px, y - py
+        if (dx or dy) and abs(dx) <= max_dx and abs(dy) <= max_dy:
+            if best is None or abs(dx) + abs(dy) < abs(best[0]) + abs(best[1]):
+                best = (dx, dy)
+    return best
+
+
+def scenario_stale_script_wait(g):
+    # Talking to an NPC ends with waitbuttonpress; StopScript leaves the
+    # context's nativePtr at WaitForAorBPress. The free overworld must still
+    # take a long press (Start) and taps must walk, not press A.
+    npc = nearby_npc(g)
+    assert npc, "no NPC in view of the fixture"
+    g.tap(*tile_center(*npc), settle=5)
+    talked = g.wait_until(lambda: g.status()["text_waiting"] or g.status()["text_printing"],
+                          600, 5)
+    assert talked, f"tapping the NPC at {npc} started no dialogue"
+    for _ in range(40):
+        s = g.status()
+        if s["field_free"] and not s["text_waiting"] and not s["text_printing"]:
+            break
+        g.tap(120, 140, settle=20)
+    assert g.wait_until(lambda: g.status()["field_free"], 300), "dialogue never ended"
+    _, mode, _, _, native = struct.unpack("<BBBBI", g.mem("iwram", SCRIPT_CONTEXT, 8))
+    stale = mode == 0 and (native & ~1) == WAIT_FOR_A_OR_B_PRESS
+    assert not g.status()["script_wait"], "stopped script still reported as waiting"
+    g.long_press(*tile_center(0, -3))
+    assert g.wait_until(lambda: g.status()["start_menu"], 60), \
+        f"long press after dialogue did not open Start ({g.actions()[-3:]})"
+    return {"npc": npc, "stale_native_ptr": stale}
+
+
+def scenario_start_menu_slide(g):
+    # Slide a finger down the Start menu and lift on BAG: the caret follows
+    # the finger and the release confirms (a sloppy tap becomes a slide).
+    g.long_press(*tile_center(0, -3))
+    assert g.wait_until(lambda: g.status()["start_menu"], 60), "start menu did not open"
+    count = g.u8(NUM_START_ACTIONS)
+    actions = list(g.mem("ewram", START_ACTIONS, count))
+    items = g.status()["menu_items"]
+    x, y, w, h = items[0]
+    bx, by, bw, bh = items[actions.index(MENU_ACTION_BAG)]
+    cx = x + w // 2
+    pts = [(cx, y + h // 2 + k) for k in range(0, (by + bh // 2) - (y + h // 2) + 1, 3)]
+    g.drag(pts, per=2, settle=10)
+    decisions = [a["decision"] for a in g.actions()]
+    assert "menu-slide-select" in decisions, decisions
+    assert g.wait_until(lambda: g.cb2() == CB2_BAG, 240), f"slide did not open the bag ({decisions})"
+    return {"hovered": decisions.count("menu-hover")}
+
+
 BATTLE_MAIN_CB2 = 0x08038420
 
 
@@ -433,6 +500,11 @@ def scenario_wild_battle(g):
     return {"result": "fought one turn then ran", "fixture": str(fixture)}
 
 
+# Scenarios that need another fixture (resolved next to --state).
+SCENARIO_FIXTURES = {
+    "stale_script_wait": "door_menu.state",   # Littleroot: NPCs in view
+}
+
 SCENARIOS = {
     "wild_battle": scenario_wild_battle,
     "party_menu": scenario_party_menu,
@@ -443,6 +515,8 @@ SCENARIOS = {
     "save_prompt_tap_no": scenario_save_prompt_tap_no,
     "save_prompt_tap_outside": scenario_save_prompt_tap_outside,
     "queued_tap": scenario_queued_tap,
+    "stale_script_wait": scenario_stale_script_wait,
+    "start_menu_slide": scenario_start_menu_slide,
 }
 
 
@@ -467,7 +541,11 @@ def main():
     for name, fn in SCENARIOS.items():
         if args.only and name not in args.only:
             continue
-        game = Game(args, name)
+        fixture = SCENARIO_FIXTURES.get(name)
+        state = args.state.parent / fixture if fixture else None
+        if state is not None and not state.exists():
+            raise SystemExit(f"{name}: fixture {state} missing")
+        game = Game(args, name, state)
         try:
             detail = fn(game)
             results[name] = {"ok": True, **(detail or {})}
