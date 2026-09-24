@@ -116,6 +116,10 @@ struct Core {
     const gbarecomp::TouchFrameInfo* info = nullptr;  // valid during input_frame
     // Held text speed-up (a stationary finger during printing).
     bool holding_text = false;
+    // Taps that arrived while a macro was running; replayed in order once it
+    // finishes (bounded, and only while fresh) instead of being dropped.
+    struct PendingTap { gbarecomp::Gesture g; std::uint64_t frame = 0; };
+    std::vector<PendingTap> pending_taps;
 };
 Core& core();
 

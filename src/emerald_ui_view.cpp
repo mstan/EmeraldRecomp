@@ -37,7 +37,20 @@ void UiView::prepare(const ViewMemory& m, const FieldView& field, int width, int
         const int dx = at_left == at_right ? 0 : at_right ? right : -left;
         const int dy = at_top ? -top : at_bottom ? bottom : 0;
         if (!dx && !dy) continue;
-        const int x = std::max(0, (int(w[1]) - 1) * 8);
+        // Standard frames occupy one tile column left of the window; dialogue
+        // frames (menu.c WindowFunc_DrawDialogueFrame and its custom-tile
+        // variants) occupy two (tilemapLeft - 2 and - 1). Their outer column
+        // repeats one vertical-edge tile down every interior row, while window
+        // interiors never repeat a tile, so the repeat identifies the frame.
+        int frame_left = 1;
+        if (w[1] >= 2) {
+            const auto edge = u16(m.vram + screen + (w[2] * 32 + w[1] - 2) * 2);
+            bool repeated = (edge & 1023) != 0;
+            for (int ty = 1; ty < w[4] && repeated; ++ty)
+                repeated = u16(m.vram + screen + ((w[2] + ty) * 32 + w[1] - 2) * 2) == edge;
+            if (repeated) frame_left = 2;
+        }
+        const int x = std::max(0, (int(w[1]) - frame_left) * 8);
         const int y = std::max(0, (int(w[2]) - 1) * 8);
         windows_[count_++] = {x - scroll_x, y - scroll_y,
             std::min(240, (w[1] + w[3] + 1) * 8) - x,

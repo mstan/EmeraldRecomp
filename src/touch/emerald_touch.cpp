@@ -297,6 +297,9 @@ bool dpad_drag(Core& c, const SceneState& s, const Gesture& g) {
     return true;
 }
 
+constexpr std::size_t kMaxPendingTaps = 3;
+constexpr std::uint64_t kPendingTapFrames = 60;  // ~1 s
+
 void route(Core& c, const Gesture& g) {
     const SceneState& s = c.scene;
     float nx = 0, ny = 0;
@@ -305,7 +308,14 @@ void route(Core& c, const Gesture& g) {
     switch (g.kind) {
         case GestureKind::Tap: {
             if (c.macro.busy()) {
-                record_action(c.frame, "tap", scene_name(s.kind), "ignored:busy", nx, ny, 0);
+                if (c.pending_taps.size() < kMaxPendingTaps) {
+                    c.pending_taps.push_back({g, c.frame});
+                    record_action(c.frame, "tap", scene_name(s.kind), "queued:busy", nx, ny,
+                                  static_cast<int>(c.pending_taps.size()));
+                } else {
+                    record_action(c.frame, "tap", scene_name(s.kind), "dropped:queue-full",
+                                  nx, ny, 0);
+                }
                 return;
             }
             if (s.battle.active && battle_panel_tap(c, s, g.drawable_x, g.drawable_y)) {
@@ -318,7 +328,13 @@ void route(Core& c, const Gesture& g) {
                 return;
             }
             if (s.menu.live || s.list.live) {
-                press_b(c, "tap-outside-menu:B", g, nx, ny);
+                // A menu answering an on-screen message (Yes/No, multichoice)
+                // is a prompt: tapping anywhere else confirms the highlighted
+                // choice. A free-standing menu (Start, bag actions) closes.
+                if (s.text.dialogue_box)
+                    press_a(c, "tap-outside-prompt:A", g, nx, ny);
+                else
+                    press_b(c, "tap-outside-menu:B", g, nx, ny);
                 return;
             }
             if (text_active(s)) {
@@ -427,6 +443,17 @@ std::uint16_t input_frame(const k::TouchFrameInfo* f) {
     g_native_hold = wants_native ? std::min(g_native_hold + 1, 60) : 0;
     g_native_requested = g_native_hold >= 8;
 
+    // Replay taps queued behind a finished macro before this frame's input.
+    while (!c.pending_taps.empty() && !c.macro.busy()) {
+        const Core::PendingTap p = c.pending_taps.front();
+        c.pending_taps.erase(c.pending_taps.begin());
+        if (c.frame - p.frame > kPendingTapFrames) {
+            record_action(c.frame, "tap", scene_name(c.scene.kind), "dropped:stale", 0, 0,
+                          static_cast<int>(c.frame - p.frame));
+            continue;
+        }
+        route(c, p.g);
+    }
     for (std::size_t i = 0; i < f->gesture_count; ++i) route(c, f->gestures[i]);
 
     // Hold A while a stationary finger rests during text printing.
@@ -506,13 +533,14 @@ int tcp_command(const char* request, void (*write)(void*, const char*, std::size
             "{\"ok\":true,\"frame\":%llu,\"scene\":\"%s\",\"cb2\":\"0x%08X\","
             "\"field_free\":%s,\"menu\":%s,\"menu_window\":%d,\"menu_cursor\":%d,"
             "\"list\":%s,\"list_task\":%d,\"list_selected\":%d,\"list_scroll\":%d,"
-            "\"text_waiting\":%s,\"text_printing\":%s,\"start_menu\":%s,"
+            "\"text_waiting\":%s,\"text_printing\":%s,\"dialogue_box\":%s,\"start_menu\":%s,"
             "\"battle_control\":\"%s\",\"macro\":\"%s\",\"native_view\":%s,\"mobile\":%s}",
             static_cast<unsigned long long>(s.frame), scene_name(s.kind), s.cb2,
             s.field.free ? "true" : "false", s.menu.live ? "true" : "false",
             s.menu.window, s.menu.cursor, s.list.live ? "true" : "false", s.list.task,
             s.list.selected, s.list.scroll, s.text.waiting ? "true" : "false",
-            s.text.printing ? "true" : "false", s.start_menu ? "true" : "false",
+            s.text.printing ? "true" : "false", s.text.dialogue_box ? "true" : "false",
+            s.start_menu ? "true" : "false",
             battle_control_name(s.battle.control),
             core().macro.busy() ? core().macro.label().c_str() : "",
             g_native_requested ? "true" : "false", g_mobile ? "true" : "false");

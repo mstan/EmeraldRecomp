@@ -68,6 +68,30 @@ window_title  = "EmeraldRecomp"
 arm   = []
 thumb = []
 
+# ── Runtime code copy that is NOT symbol-derivable ──────────────────────
+# VerifyFlashSector (agb_flash.c) stack-copies VerifyFlashSector_Core into a
+# stack-local buffer and calls it there, once per sector written by a save.
+# A stack destination has no symbol for the importer, so it is stated here;
+# it is deterministic for the in-game save path (Start > SAVE). Reviewed
+# 2026-09-23: after a bridged save the 0x30 live bytes at 0x03007C74 equal
+# ROM 0x082E1B70..0x082E1BA0 exactly (tools/touch_scenarios.py --bridge
+# save_prompt_tap_outside), and that was the only dispatch miss (x14, one per
+# sector). Boot (flash ID, save load) is already fully static. Another call
+# depth would surface as a loud miss at a different stack address. Same
+# helper class as FRLG's ReadFlash1_stack and beads-mc7.4 (Ruby/Sapphire).
+[[code_copy]]
+runtime_start = 0x03007C74
+source_start  = 0x082E1B70
+size          = 0x30
+name          = "VerifyFlashSector_Core_stack_Buffer"
+note = "VerifyFlashSector stack-copies VerifyFlashSector_Core (save-path verify)"
+
+[[extra_func]]
+addr = 0x03007C74
+mode = "thumb"
+name = "VerifyFlashSector_Core_stack"
+note = "THUMB entry of the VerifyFlashSector_Core stack copy above"
+
 # ── Touch input probes (src/touch/emerald_scene.cpp) ─────────────────────
 # Observe-only entry guards: the registered callbacks always decline, so the
 # original guest bodies run unchanged. They report which menu-input routine

@@ -71,6 +71,10 @@ struct TextState {
     bool waiting = false;       // a printer waits for A/B (arrow shown)
     std::uint8_t window = 0xFF;
     bool script_wait_button = false;  // scrcmd waitbuttonpress
+    // A dialogue-framed message window (menu.c WindowFunc_DrawDialogueFrame)
+    // other than the live menu is on screen: the menu is a prompt answering
+    // it (Yes/No, multichoice), not a free-standing menu.
+    bool dialogue_box = false;
 };
 
 struct FieldState {

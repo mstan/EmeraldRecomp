@@ -79,7 +79,9 @@ class Game:
             f'id = "widescreen"\nenabled = {"true" if aspect != "native" else "false"}\n'
             f'[feature.values]\naspect = "{aspect if aspect != "native" else "fit"}"\n')
         env = {k: v for k, v in os.environ.items() if not k.startswith("GBARECOMP_")}
-        env.update(GBARECOMP_STRICT_STATIC="1", RECOMP_RTC_EPOCH="1789261200")
+        env.update(RECOMP_RTC_EPOCH="1789261200")
+        if not args.bridge:
+            env["GBARECOMP_STRICT_STATIC"] = "1"   # a dispatch miss aborts the run
         if args.toolchain:
             env["PATH"] = str(args.toolchain) + os.pathsep + env["PATH"]
         port = free_port()
@@ -176,7 +178,7 @@ class Game:
             m = self.c.call("misses")
             strict = not (m.get("distinct_misses") or m.get("interpreted_insns") or
                           m.get("healed_native"))
-            coverage = m.get("coverage", "UNKNOWN") if strict else f"NOT_STATIC {m}"
+            coverage = m.get("coverage", "UNKNOWN") if strict else f"NOT_STATIC {json.dumps(m)}"
         except Exception as e:
             coverage = f"UNKNOWN ({e})"
         try:
@@ -298,6 +300,83 @@ def scenario_party_menu(g):
     return {"popup_items": len(items)}
 
 
+MENU_ACTION_SAVE = 5
+
+
+def open_save_prompt(g):
+    """Start menu -> SAVE -> the "Would you like to save the game?" Yes/No."""
+    g.long_press(*tile_center(0, -3))
+    assert g.wait_until(lambda: g.status()["start_menu"], 60), "start menu did not open"
+    count = g.u8(NUM_START_ACTIONS)
+    actions = list(g.mem("ewram", START_ACTIONS, count))
+    x, y, w, h = g.status()["menu_items"][actions.index(MENU_ACTION_SAVE)]
+    g.tap(x + w // 2, y + h // 2, settle=10)
+    prompt = lambda: (lambda s: s["menu"] and not s["start_menu"] and s["dialogue_box"]
+                      and len(s["menu_items"]) == 2)(g.status())
+    assert g.wait_until(prompt, 240, 5), f"save Yes/No prompt did not appear ({g.status()})"
+    s = g.status()
+    assert s["menu_cursor"] == 0, f"caret should start on YES ({s['menu_cursor']})"
+    return s
+
+
+def scenario_save_prompt_tap_no(g):
+    # Tapping a choice confirms it, even when the caret is elsewhere.
+    s = open_save_prompt(g)
+    x, y, w, h = s["menu_items"][1]
+    g.tap(x + w // 2, y + h // 2, settle=10)
+    assert g.wait_until(lambda: g.status()["start_menu"], 120, 5), \
+        f"NO did not return to the Start menu ({g.status()})"
+    decisions = [a["decision"] for a in g.actions()]
+    assert "menu-item" in decisions, decisions
+    return {"after": "start menu"}
+
+
+SAVE_COUNTER = 0x03006200   # gSaveCounter: incremented by every completed save
+
+
+def scenario_save_prompt_tap_outside(g):
+    # Tapping off a prompt confirms the highlighted choice. Answer every YES
+    # prompt (save? / overwrite?) that way and advance the text by taps: the
+    # game must complete a save, never fall back to the Start menu (= NO).
+    open_save_prompt(g)
+    before = g.u32(SAVE_COUNTER)
+    prompts = 0
+    for _ in range(60):
+        s = g.status()
+        if g.u32(SAVE_COUNTER) != before and s["field_free"]:
+            break
+        assert not s["start_menu"], "a prompt was answered NO (back at the Start menu)"
+        if s["menu"] and s["dialogue_box"]:
+            g.tap(60, 40, settle=20)              # the field above the prompt
+            prompts += 1
+        elif s["text_waiting"]:
+            g.tap(120, 140, settle=20)
+        else:
+            g.frames(20)
+    decisions = [a["decision"] for a in g.actions()]
+    assert "tap-outside-prompt:A" in decisions, decisions
+    assert g.u32(SAVE_COUNTER) != before, f"YES did not complete a save ({decisions[-6:]})"
+    return {"prompts_confirmed": prompts, "save_counter": [before, g.u32(SAVE_COUNTER)]}
+
+
+def scenario_queued_tap(g):
+    # A tap while a macro runs is queued and executed, never dropped: tap NO,
+    # then tap outside the Start menu before the NO macro has finished.
+    s = open_save_prompt(g)
+    x, y, w, h = s["menu_items"][1]
+    vx, vy = g.view(x + w // 2, y + h // 2)
+    g.c.call("touch_tap", x=vx, y=vy, hold_frames=2)
+    g.frames(3)
+    ox, oy = g.view(40, 120)
+    g.c.call("touch_tap", x=ox, y=oy, hold_frames=2)
+    g.frames(4)
+    decisions = [a["decision"] for a in g.actions()]
+    assert "queued:busy" in decisions, f"second tap was not queued: {decisions}"
+    assert g.wait_until(lambda: not g.status()["menu"] and g.status()["field_free"], 240, 5), \
+        f"queued tap never closed the Start menu ({g.status()}, {decisions})"
+    return {"decisions": decisions[-4:]}
+
+
 BATTLE_MAIN_CB2 = 0x08038420
 
 
@@ -361,6 +440,9 @@ SCENARIOS = {
     "start_menu_bag": scenario_start_menu_bag,
     "tap_walk": scenario_tap_walk,
     "draw_path": scenario_draw_path,
+    "save_prompt_tap_no": scenario_save_prompt_tap_no,
+    "save_prompt_tap_outside": scenario_save_prompt_tap_outside,
+    "queued_tap": scenario_queued_tap,
 }
 
 
@@ -372,6 +454,9 @@ def main():
     p.add_argument("--toolchain", type=Path)
     p.add_argument("--aspect", default="native", choices=["native", "fit", "16:9", "21:9", "32:9"])
     p.add_argument("--only", nargs="*")
+    p.add_argument("--bridge", action="store_true",
+                   help="diagnostic: let the interpreter bridge dispatch misses (reported as "
+                        "NOT_STATIC with the missed PCs) instead of aborting under strict static")
     p.add_argument("--list", action="store_true")
     args = p.parse_args()
     if args.list:

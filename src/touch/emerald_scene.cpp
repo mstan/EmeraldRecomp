@@ -253,6 +253,43 @@ Rect window_screen_rect(const Mem& m, int window) {
 
 namespace {
 Rect window_rect(const Mem& m, std::uint8_t window) { return window_screen_rect(m, window); }
+
+// A visible window drawn with a dialogue frame, other than `exclude`. Visible
+// = at least one interior tilemap entry holds the window's own tile (hidden
+// but allocated windows share the BG); dialogue frame = the column two tiles
+// left of the window repeats one vertical-edge entry down every interior row
+// (menu.c WindowFunc_DrawDialogueFrame and its custom-tile variants), which a
+// window interior never does. Standard (menu) frames are one tile wide.
+bool dialogue_window_visible(const Mem& m, int exclude) {
+    if (!m.vram) return false;
+    for (int i = 0; i < 32; ++i) {
+        if (i == exclude) continue;
+        const std::uint32_t w = addr::gWindows + i * off::kWindowSize;
+        const int bg = m.u8(w + 0), left = m.u8(w + 1), top = m.u8(w + 2);
+        const int width = m.u8(w + 3), height = m.u8(w + 4), pal = m.u8(w + 5);
+        const unsigned base = m.u16(w + 6);
+        if (bg > 3 || !width || !height || !m.u32(w + 8) || left < 2 ||
+            left + width > 32 || top + height > 32)
+            continue;
+        const std::uint32_t screen =
+            0x06000000u + ((m.io16(0x08 + 2 * bg) >> 8) & 31) * 0x800u;
+        auto entry = [&](int tx, int ty) {
+            return m.u16(screen + static_cast<std::uint32_t>((ty * 32 + tx) * 2));
+        };
+        bool visible = false;
+        for (int ty = 0; ty < height && !visible; ++ty)
+            for (int tx = 0; tx < width && !visible; ++tx) {
+                const unsigned e = entry(left + tx, top + ty);
+                visible = (e & 1023) == base + ty * width + tx && int(e >> 12) == pal;
+            }
+        if (!visible) continue;
+        const std::uint16_t edge = entry(left - 2, top);
+        bool framed = (edge & 1023) != 0;
+        for (int ty = 1; ty < height && framed; ++ty) framed = entry(left - 2, top + ty) == edge;
+        if (framed) return true;
+    }
+    return false;
+}
 }  // namespace
 
 SceneState classify(const Mem& m, std::uint64_t frame) {
@@ -321,6 +358,7 @@ SceneState classify(const Mem& m, std::uint64_t frame) {
     }
     s.start_menu = start_menu_input && s.menu.live &&
                    s.menu.window == m.u8(addr::sStartMenuWindowId);
+    if (s.menu.live) s.text.dialogue_box = dialogue_window_visible(m, s.menu.window);
 
     // List menus.
     if (g_list_probe && g_list_task < 16) {
@@ -338,6 +376,8 @@ SceneState classify(const Mem& m, std::uint64_t frame) {
         list.selected = m.u16(t + off::kListSelected);
         list.window_rect = window_rect(m, list.window);
         list.live = !list.window_rect.empty() && list.total > 0 && list.max_showed > 0;
+        if (list.live && !s.text.dialogue_box)
+            s.text.dialogue_box = dialogue_window_visible(m, list.window);
     }
 
     // Battle controllers: the first player-side battler with an input handler.
