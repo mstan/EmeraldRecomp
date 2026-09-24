@@ -336,7 +336,12 @@ if ($Platforms -contains 'android') {
 }
 
 # ── Checksums ──────────────────────────────────────────────────────────────
-$sums = foreach ($a in $artifacts) {
+# Every artifact of this version in release-stage (a partial -Platforms run
+# keeps the others' checksums).
+$all = @(Get-ChildItem -LiteralPath $out -File |
+    Where-Object { $_.Name -match "^EmeraldRecomp-.*-v$([regex]::Escape($Version))\.(zip|AppImage|apk)$" } |
+    Sort-Object Name | ForEach-Object FullName)
+$sums = foreach ($a in $all) {
   "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $a).Hash.ToLowerInvariant(), (Split-Path -Leaf $a)
 }
 [IO.File]::WriteAllLines((Join-Path $out 'SHA256SUMS.txt'), [string[]]$sums)
