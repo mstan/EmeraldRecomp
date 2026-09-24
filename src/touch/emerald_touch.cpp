@@ -634,6 +634,34 @@ int tcp_command(const char* request, void (*write)(void*, const char*, std::size
     return 1;
 }
 
+void diagnostics_snapshot(void (*write)(void*, const char*, std::size_t), void* ctx) {
+    // Every Emerald touch ring in full, via the same encoders the TCP
+    // commands use (persisted by the runtime on background/exit).
+    std::string out = "{";
+    auto add = [&](const char* key, const std::string& request) {
+        std::string reply;
+        tcp_command(request.c_str(),
+                    [](void* c, const char* d, std::size_t n) {
+                        static_cast<std::string*>(c)->append(d, n);
+                    },
+                    &reply);
+        out += "\"";
+        out += key;
+        out += "\":";
+        out += reply.empty() ? "null" : reply;
+        out += ",";
+    };
+    add("status", "{\"cmd\":\"emerald_touch_status\"}");
+    add("actions", "{\"cmd\":\"emerald_touch_actions\",\"limit\":" +
+                       std::to_string(kActionRing) + "}");
+    add("scenes", "{\"cmd\":\"emerald_touch_scenes\",\"limit\":" +
+                      std::to_string(kSceneRing) + "}");
+    add("coverage", "{\"cmd\":\"emerald_touch_coverage\"}");
+    add("field", "{\"cmd\":\"emerald_touch_field\"}");
+    out.back() = '}';
+    write(ctx, out.data(), out.size());
+}
+
 }  // namespace emerald::touch
 
 // Probes are statically registered; mod activation disables every entry hook

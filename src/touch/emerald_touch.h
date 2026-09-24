@@ -32,6 +32,8 @@ void host_overlay(gbarecomp::HostOverlay* overlay);
 void presentation_request(gbarecomp::RunOptions::PresentationRequest* request);
 int tcp_command(const char* request, void (*write)(void*, const char*, std::size_t),
                 void* ctx);
+// All Emerald touch rings as one JSON object (RunOptions::diagnostics_snapshot).
+void diagnostics_snapshot(void (*write)(void*, const char*, std::size_t), void* ctx);
 void set_mobile(bool mobile);   // mobile presentation policy (native 3:2 scenes)
 
 constexpr std::uint32_t kGestureClaims =

@@ -155,6 +155,7 @@ int emerald_main(int argc, char** argv) {
     opts.touch_gesture_claims = emerald::touch::kGestureClaims;
     opts.host_overlay = emerald::touch::host_overlay;
     opts.tcp_command = emerald::touch::tcp_command;
+    opts.diagnostics_snapshot = emerald::touch::diagnostics_snapshot;
     opts.presentation_request = emerald::touch::presentation_request;
     emerald::touch::set_mobile(on_mobile);
     if (on_mobile) {
