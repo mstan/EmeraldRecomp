@@ -77,6 +77,7 @@ function Invoke-Captured {
     $quoted = $Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }
     $p = Start-Process -FilePath $File -ArgumentList $quoted -WorkingDirectory $WorkingDirectory `
         -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $null = $p.Handle   # .NET only records ExitCode once the handle is held
     $p.PriorityClass = 'BelowNormal'
     $p.WaitForExit()
     [pscustomobject]@{ ExitCode = $p.ExitCode
@@ -162,6 +163,7 @@ if ($Platforms -contains 'windows') {
       '-DSDL2_LIBRARY=C:/msys64/mingw64/lib/libSDL2.dll.a') 'windows configure'
   $p = Start-Process -FilePath "$MingwBin\cmake.exe" -NoNewWindow -PassThru `
       -ArgumentList @('--build', "`"$build`"", '--target', 'EmeraldRecomp', '-j', $Jobs)
+  $null = $p.Handle
   $p.PriorityClass = 'BelowNormal'
   $p.WaitForExit()
   if ($p.ExitCode -ne 0) { throw "windows build failed ($($p.ExitCode))" }
