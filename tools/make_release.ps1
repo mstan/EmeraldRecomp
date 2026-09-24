@@ -326,8 +326,14 @@ if ($Platforms -contains 'android') {
   $buildTools = Get-ChildItem 'C:\Android\Sdk\build-tools' -Directory | Sort-Object { [version]$_.Name } | Select-Object -Last 1
   $badging = (Invoke-Captured -File (Join-Path $buildTools.FullName 'aapt2.exe') -Arguments @('dump', 'badging', $apk)).Output
   if ($badging -notmatch "versionName='$([regex]::Escape($Version))'") { throw "APK versionName is not $Version" }
-  $signer = Invoke-Captured -File 'cmd.exe' -Arguments @('/c', (Join-Path $buildTools.FullName 'apksigner.bat'), 'verify', '--print-certs', $apk)
-  if ($signer.ExitCode -ne 0) { $signer.Output; throw 'apksigner verification failed' }
+  $java = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin\java.exe' } else { (Get-Command java -ErrorAction Stop).Source }
+  $signer = Invoke-Captured -File $java -Arguments @('-jar', (Join-Path $buildTools.FullName 'lib\apksigner.jar'),
+      'verify', '--print-certs', $apk)
+  # Must positively see a verified signer; an empty or errored run never passes.
+  if ($signer.ExitCode -ne 0 -or $signer.Output -notmatch 'Signer #1 certificate DN:') {
+    $signer.Output; throw 'apksigner verification failed'
+  }
+  Write-Host ([regex]::Match($signer.Output, 'Signer #1 certificate DN: .*').Value)
   if ($signer.Output -match 'CN=Android Debug') {
     Write-Warning 'The Android APK is signed with the local DEBUG key. Set GBARECOMP_KEYSTORE / _PASSWORD / GBARECOMP_KEY_ALIAS for a release key before publishing.'
   }
