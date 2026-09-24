@@ -68,11 +68,24 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
             src/emerald_object_view.cpp
             src/mods/emerald_adaptive_view_plugin.cpp
             src/emerald_ui_view.cpp
-            src/mods/emerald_absolute_rtc_plugin.cpp)
+            src/mods/emerald_absolute_rtc_plugin.cpp
+            src/touch/emerald_scene.cpp
+            src/touch/emerald_touch.cpp
+            src/touch/emerald_touch_menus.cpp
+            src/touch/emerald_touch_battle.cpp
+            src/touch/emerald_touch_field.cpp)
     endif()
-    add_executable(${TARGET}
-        ${VARIANT_GAME_SOURCES}
-        ${VARIANT_GENERATED})
+    if(ANDROID)
+        # SDLActivity loads libmain.so; the shared gbarecomp Android shell
+        # (gbarecomp/platform/android) builds this target as `main`.
+        add_library(${TARGET} SHARED
+            ${VARIANT_GAME_SOURCES}
+            ${VARIANT_GENERATED})
+    else()
+        add_executable(${TARGET}
+            ${VARIANT_GAME_SOURCES}
+            ${VARIANT_GENERATED})
+    endif()
 
     # Keep generated guest translation units at a bounded optimization and
     # debug-info cost. gba_recompile emits stable recompiled_NNN.cpp shards.
@@ -156,7 +169,11 @@ if(GBAGAME_RECOMP_UI)
             GBARECOMP_ENABLE_MODS=1)
     endif()
     recomp_target_launcher_ui(game_launcher_ui CONSOLE gba)
-    find_package(SDL2 REQUIRED)
+    set_target_properties(game_launcher_ui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # Android builds provide SDL2 from the shared shell's SDL subproject.
+    if(NOT TARGET SDL2::SDL2)
+        find_package(SDL2 REQUIRED)
+    endif()
     target_link_libraries(game_launcher_ui PUBLIC SDL2::SDL2)
     if(WIN32)
         target_link_libraries(game_launcher_ui PUBLIC opengl32)
@@ -165,12 +182,18 @@ if(GBAGAME_RECOMP_UI)
 endif()
 
 # Emerald — USA, sha1 f3ae0881…
-add_gba_variant(EmeraldRecomp emerald 19892 "EmeraldRecomp"
+if(ANDROID)
+    set(EMERALD_TARGET main)
+else()
+    set(EMERALD_TARGET EmeraldRecomp)
+endif()
+add_gba_variant(${EMERALD_TARGET} emerald 19892 "EmeraldRecomp"
     "Pokemon Emerald (USA)" "f3ae088181bf583e55daf962a92bb46f4f1d07b7" 0x1F1C08FB)
 
 # Ship the game-owned, disabled-by-default mod catalog beside the executable.
+# (Android packages the catalog into the app payload instead.)
 set(EMERALD_PRELOADED_MODS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded")
-if(EXISTS "${EMERALD_PRELOADED_MODS}/packages")
+if(NOT ANDROID AND EXISTS "${EMERALD_PRELOADED_MODS}/packages")
     add_custom_command(TARGET EmeraldRecomp POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${EMERALD_PRELOADED_MODS}"

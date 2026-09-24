@@ -1,0 +1,13 @@
+format_version = 1
+# Android default: the adaptive overworld view follows the phone or tablet in
+# portrait and landscape. Players can still turn it off; this file is only
+# installed once and is theirs afterwards.
+[[package]]
+id = "pokemon-emerald.enhancement.widescreen"
+version = "0.2.0"
+[[feature]]
+package_id = "pokemon-emerald.enhancement.widescreen"
+id = "widescreen"
+enabled = true
+[feature.values]
+aspect = "fit"

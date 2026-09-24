@@ -1,0 +1,26 @@
+# Android runtime configuration for Pokémon Emerald (USA).
+# Gradle stages this as variants/emerald/game.toml inside the app's private
+# files directory; paths resolve relative to that location. The BIOS and ROM
+# are imported by the player on first launch (SHA-1 verified); neither ships
+# in the APK.
+
+[game]
+name       = "Pokémon Emerald Version"
+short_name = "emerald"
+
+[bios]
+path = "../../bios/gba_bios.bin"
+sha1 = "300c20df6731a33952ded8c436f7f186d25d3492"
+
+[rom]
+path = "../../roms/emerald_usa.gba"
+sha1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"
+
+[save]
+type = "flash1m"
+size = "0x20000"
+path = "../../saves/emerald_usa.sav"
+
+[runtime]
+debug_port   = 19892
+window_title = "EmeraldRecomp"

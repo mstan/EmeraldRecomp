@@ -67,3 +67,47 @@ window_title  = "EmeraldRecomp"
 [functions]
 arm   = []
 thumb = []
+
+# ── Touch input probes (src/touch/emerald_scene.cpp) ─────────────────────
+# Observe-only entry guards: the registered callbacks always decline, so the
+# original guest bodies run unchanged. They report which menu-input routine
+# processed input this frame, so taps map onto the menu actually on screen.
+[[mod_function_hook]]
+addr = 0x0819856C
+mode = "thumb"
+note = "Menu_ProcessInput — sMenu live (wrapping)"
+
+[[mod_function_hook]]
+addr = 0x081985D8
+mode = "thumb"
+note = "Menu_ProcessInputNoWrap — sMenu live"
+
+[[mod_function_hook]]
+addr = 0x08198658
+mode = "thumb"
+note = "ProcessMenuInput_other — sMenu live (wrapping)"
+
+[[mod_function_hook]]
+addr = 0x081986C4
+mode = "thumb"
+note = "Menu_ProcessInputNoWrapAround_other — sMenu live"
+
+[[mod_function_hook]]
+addr = 0x08198C58
+mode = "thumb"
+note = "Menu_ProcessInputNoWrapClearOnChoose — Yes/No and similar"
+
+[[mod_function_hook]]
+addr = 0x08199334
+mode = "thumb"
+note = "Menu_ProcessGridInput — grid sMenu live"
+
+[[mod_function_hook]]
+addr = 0x081AE604
+mode = "thumb"
+note = "ListMenu_ProcessInput(listTaskId) — list menu live"
+
+[[mod_function_hook]]
+addr = 0x08085DAC
+mode = "thumb"
+note = "DoCB1_Overworld — field input processed this frame"

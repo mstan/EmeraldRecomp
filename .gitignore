@@ -98,3 +98,12 @@ symbols/*_syms.txt
 symbols/*_sections.txt
 variants/*/symbols/*_syms.txt
 variants/*/symbols/*_sections.txt
+
+# Android build output (the shared shell lives in gbarecomp/platform/android).
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+*.apk
+*.aab

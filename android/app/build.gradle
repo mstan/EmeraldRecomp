@@ -1,0 +1,41 @@
+plugins {
+    id "com.android.application"
+}
+
+// Engine / UI checkouts: the pinned submodules by default; a feature worktree
+// can be selected with -PgbarecompRoot=... / -PrecompUiRoot=... (or the
+// GBARECOMP_ROOT / RECOMP_UI_ROOT environment variables).
+def gameRoot = rootDir.parentFile
+def pick = { String prop, String env, File fallback ->
+    def v = providers.gradleProperty(prop).orNull ?: System.getenv(env)
+    return v ? new File(v) : fallback
+}
+def engineRoot = pick("gbarecompRoot", "GBARECOMP_ROOT", new File(gameRoot, "gbarecomp"))
+def recompUiRoot = pick("recompUiRoot", "RECOMP_UI_ROOT", new File(gameRoot, "recomp-ui"))
+
+ext.gbaGame = [
+    applicationId : "com.mstan.emeraldrecomp",
+    versionCode   : 1,
+    versionName   : "0.1.0-touch",
+    title         : "Pokémon Emerald",
+    romLabel      : "Pokémon Emerald (USA) ROM",
+    romSha1       : ["f3ae088181bf583e55daf962a92bb46f4f1d07b7"],
+    romSize       : 16777216,
+    romFile       : "emerald_usa.gba",
+    biosRequired  : true,
+    orientation   : "any",
+    payloadVersion: "1",
+    setupNote     : "Play in portrait or landscape: draw a path to walk, tap menus, " +
+                    "long-press for the Start menu.",
+    variant       : "emerald",
+    gameToml      : new File(rootDir, "game_android.toml"),
+    payloadDirs   : [
+        [from: new File(gameRoot, "mods/preloaded"), into: "mods"],
+        [from: new File(rootDir, "payload/mods"), into: "mods"],
+    ],
+    gameRoot      : gameRoot,
+    engineRoot    : engineRoot,
+    recompUiRoot  : recompUiRoot,
+]
+
+apply from: new File(engineRoot, "platform/android/gbarecomp-app.gradle")

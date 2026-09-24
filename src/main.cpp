@@ -23,7 +23,9 @@
 
 #include "runtime.h"
 #include "runtime_arm.h"
+#include "mobile_platform.h"
 #include "emerald_extended_view.h"
+#include "touch/emerald_touch.h"
 
 extern "C" void gf_ReadFlash1(void);
 extern "C" void gf_ReadFlash_Core(void);
@@ -100,7 +102,7 @@ void print_usage() {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int emerald_main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--help") == 0 ||
             std::strcmp(argv[i], "-h") == 0) {
@@ -108,6 +110,13 @@ int main(int argc, char** argv) {
             return 0;
         }
     }
+    std::vector<std::string> args(argv, argv + argc);
+    // Android: private-storage layout, log file, staged game.toml, no
+    // pre-boot launcher. No-op on desktop.
+    gbarecomp::MobileProcessOptions mobile;
+    mobile.game_config = GBARECOMP_DEFAULT_GAME_CONFIG;
+    mobile.program_name = "./EmeraldRecomp";
+    const bool on_mobile = gbarecomp::mobile_prepare_process(args, mobile);
 
     g_runtime_ram_dispatch_hook = &emerald_ram_dispatch;
 
@@ -140,15 +149,41 @@ int main(int argc, char** argv) {
                                ? GBARECOMP_BOXART
                                : nullptr;
     opts.launcher_game_config = GBARECOMP_DEFAULT_GAME_CONFIG;  // prefill ROM/BIOS
+    // Touch-first controls (inert without touches): gestures become verified
+    // key presses; host chrome draws trails and the battle panel.
+    opts.input_frame = emerald::touch::input_frame;
+    opts.touch_gesture_claims = emerald::touch::kGestureClaims;
+    opts.host_overlay = emerald::touch::host_overlay;
+    opts.tcp_command = emerald::touch::tcp_command;
+    opts.presentation_request = emerald::touch::presentation_request;
+    emerald::touch::set_mobile(on_mobile);
+    if (on_mobile) {
+        // Phones and tablets: follow the sensor with live re-layout, keep a
+        // physical pixel size so tablets reveal more world, resume after the
+        // OS kills a backgrounded session, and use the touch-first settings.
+        opts.orientation = gbarecomp::RunOptions::Orientation::Any;
+        opts.resize_view_sizing = gbarecomp::RunOptions::ViewSizing::Density;
+        opts.resume_suspend_state_on_launch = true;
+        opts.ui_touch_friendly = true;
+        opts.touch_pad_default = 0;
+    }
 
-#if defined(GBAGAME_RECOMP_UI)
-    std::vector<std::string> args(argv, argv + argc);
-    if (game_launcher_preboot(args, opts)) return 0;   // user quit the launcher
     std::vector<char*> av;
+#if defined(GBAGAME_RECOMP_UI)
+    if (game_launcher_preboot(args, opts)) return 0;   // user quit the launcher
+#endif
     av.reserve(args.size());
     for (auto& s : args) av.push_back(s.data());
     return gbarecomp::run_game(static_cast<int>(av.size()), av.data(), opts);
-#else
-    return gbarecomp::run_game(argc, argv, opts);
-#endif
 }
+
+#if defined(__ANDROID__)
+extern "C" int SDL_main(int argc, char** argv) {
+    // Desktop-sized host stack for the recompiled corpus (see mobile_platform.h).
+    return gbarecomp::mobile_run_with_stack(emerald_main, argc, argv);
+}
+#else
+int main(int argc, char** argv) {
+    return emerald_main(argc, argv);
+}
+#endif

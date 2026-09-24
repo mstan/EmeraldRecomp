@@ -63,6 +63,24 @@ void reset_extended_view() {
     gba_mod_set_view_width(0);
 }
 
+// Touch input sees the anchored presentation; map a point relative to the
+// native screen origin back to the native pixel it displays. Returns 1 when
+// the point shows a relocated window, 0 for ordinary native/margin content.
+int ui_view_source(int x, int y, int* source_x, int* source_y) {
+    *source_x = x;
+    *source_y = y;
+    if (!enabled) return 0;
+    int sx = x, sy = y;
+    if (ui.sample(0, x, y, &sx, &sy) == 1) {
+        *source_x = sx;
+        *source_y = sy;
+        return 1;
+    }
+    return 0;
+}
+
+bool extended_field_ready() { return enabled && view.status() == ViewStatus::Ready; }
+
 void install_extended_view(std::uint32_t, std::uint32_t) {
     if (!enabled) return;
     gba::g_ws_tilemap_provider = tile_provider;
