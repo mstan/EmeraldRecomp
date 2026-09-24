@@ -168,6 +168,11 @@ bool g_mobile = false;
 bool g_native_scenes = false;
 int g_native_hold = 0;
 bool g_native_requested = false;
+// Host-drawn big-button battle panel (below the 3:2 image in portrait, side
+// bars in landscape). Off by default: the in-image battle menus are directly
+// tappable, and the native image is centred instead of pinned to the top.
+// GBARECOMP_EMERALD_BATTLE_PANEL=1 re-enables it.
+bool g_battle_panel = false;
 
 struct Ripple { float vx, vy; std::uint32_t t; OverlayColor color; };
 std::vector<Ripple> g_ripples;
@@ -228,6 +233,8 @@ void set_mobile(bool mobile) {
     g_mobile = mobile;
     const char* env = std::getenv("GBARECOMP_EMERALD_NATIVE_SCENES");
     g_native_scenes = env ? (env[0] && env[0] != '0') : mobile;
+    const char* panel = std::getenv("GBARECOMP_EMERALD_BATTLE_PANEL");
+    g_battle_panel = panel && panel[0] && panel[0] != '0';
 }
 
 // ── Gesture routing ──────────────────────────────────────────────────────
@@ -252,6 +259,11 @@ void press_a(Core& c, const char* why, const Gesture& g, float nx, float ny) {
     c.macro.start(why, {step_press(k::kGbaKeyA)}, c.scene.signature(), false);
     record_action(c.frame, gname(g.kind), scene_name(c.scene.kind), why, nx, ny, 0);
     ripple(g, {255, 214, 74, 200});
+}
+
+// A battle input menu (action, moves, target, Yes/No, ...) is waiting.
+bool battle_menu(const SceneState& s) {
+    return s.battle.active && s.battle.control != BattleControl::None;
 }
 
 bool text_active(const SceneState& s) {
@@ -298,6 +310,7 @@ bool dpad_drag(Core& c, const SceneState& s, const Gesture& g) {
     return true;
 }
 
+constexpr std::uint64_t kDoubleTapFrames = 17;  // ~280 ms
 constexpr std::size_t kMaxPendingTaps = 3;
 constexpr std::uint64_t kPendingTapFrames = 60;  // ~1 s
 
@@ -308,6 +321,12 @@ void route(Core& c, const Gesture& g) {
 
     switch (g.kind) {
         case GestureKind::Tap: {
+            if (c.pending_menu_tap.active &&
+                c.frame - c.pending_menu_tap.frame <= kDoubleTapFrames) {
+                c.pending_menu_tap.active = false;
+                press_b(c, "double-tap:B", g, nx, ny);
+                return;
+            }
             if (c.macro.busy()) {
                 if (c.pending_taps.size() < kMaxPendingTaps) {
                     c.pending_taps.push_back({g, c.frame});
@@ -319,7 +338,8 @@ void route(Core& c, const Gesture& g) {
                 }
                 return;
             }
-            if (s.battle.active && battle_panel_tap(c, s, g.drawable_x, g.drawable_y)) {
+            if (g_battle_panel && s.battle.active &&
+                battle_panel_tap(c, s, g.drawable_x, g.drawable_y)) {
                 ripple(g, {255, 214, 74, 200});
                 return;
             }
@@ -328,14 +348,14 @@ void route(Core& c, const Gesture& g) {
                 k::host_haptic_pulse(10, 0.35f);
                 return;
             }
-            if (s.menu.live || s.list.live) {
-                // A menu answering an on-screen message (Yes/No, multichoice)
-                // is a prompt: tapping anywhere else confirms the highlighted
-                // choice. A free-standing menu (Start, bag actions) closes.
-                if (s.text.dialogue_box)
-                    press_a(c, "tap-outside-prompt:A", g, nx, ny);
-                else
-                    press_b(c, "tap-outside-menu:B", g, nx, ny);
+            if (s.menu.live || s.list.live || battle_menu(s)) {
+                // Off the items of an open menu (field, script or battle): one
+                // tap confirms the highlighted choice, a double tap backs out
+                // (decided once the double-tap window passes; see input_frame).
+                c.pending_menu_tap = {true, g, c.frame};
+                record_action(c.frame, "tap", scene_name(s.kind),
+                              s.text.dialogue_box ? "tap-outside-prompt:pending"
+                                                  : "tap-outside-menu:pending", nx, ny, 0);
                 return;
             }
             if (text_active(s)) {
@@ -353,9 +373,11 @@ void route(Core& c, const Gesture& g) {
             if (s.kind != SceneKind::Overworld && s.kind != SceneKind::Boot &&
                 s.kind != SceneKind::Battle) {
                 // Universal fallback for screens without a precise provider:
-                // tap confirms. Logged as unmapped so coverage stays honest.
+                // tap confirms, double tap backs out (same window as menus).
+                // Logged as unmapped so coverage stays honest.
                 record_unclaimed(s, "tap");
-                press_a(c, "fallback:A", g, nx, ny);
+                c.pending_menu_tap = {true, g, c.frame};
+                record_action(c.frame, "tap", scene_name(s.kind), "fallback:pending", nx, ny, 0);
                 return;
             }
             record_action(c.frame, "tap", scene_name(s.kind), "unclaimed", nx, ny, 0);
@@ -457,6 +479,26 @@ std::uint16_t input_frame(const k::TouchFrameInfo* f) {
     }
     for (std::size_t i = 0; i < f->gesture_count; ++i) route(c, f->gestures[i]);
 
+    // A lone tap off an open menu's items becomes A once no second tap came.
+    if (c.pending_menu_tap.active && c.frame - c.pending_menu_tap.frame > kDoubleTapFrames) {
+        const Core::MenuTap p = c.pending_menu_tap;
+        c.pending_menu_tap.active = false;
+        float nx = 0, ny = 0;
+        view_to_native(p.g.view_x, p.g.view_y, &nx, &ny);
+        const SceneState& s = c.scene;
+        const bool menu = s.menu.live || s.list.live || battle_menu(s);
+        const bool screen = s.kind != SceneKind::Overworld && s.kind != SceneKind::Boot &&
+                            s.kind != SceneKind::Battle;
+        if ((menu || screen) && !c.macro.busy())
+            press_a(c, s.text.dialogue_box ? "tap-outside-prompt:A"
+                       : menu               ? "tap-outside-menu:A"
+                                            : "fallback:A",
+                    p.g, nx, ny);
+        else
+            record_action(c.frame, "tap", scene_name(c.scene.kind), "tap-outside:expired", nx,
+                          ny, 0);
+    }
+
     // Hold A while a stationary finger rests during text printing.
     bool hold = false;
     if (c.scene.text.printing && !c.macro.busy()) {
@@ -480,7 +522,8 @@ std::uint16_t input_frame(const k::TouchFrameInfo* f) {
 
 void presentation_request(k::RunOptions::PresentationRequest* r) {
     r->native_view = g_native_requested;
-    r->anchor_top = g_native_requested;
+    // Centred; the virtual pad scales to fit the band below the image.
+    r->anchor_top = g_native_requested && g_battle_panel;  // room for the panel
 }
 
 // ── Overlay ──────────────────────────────────────────────────────────────
@@ -498,7 +541,7 @@ void host_overlay(HostOverlay* ov) {
         ov->stroke_circle(r.vx, r.vy, 5.0f + 10.0f * t, 1.5f, c, OverlaySpace::View);
     }
     field_overlay(*ov);
-    if (core().scene.battle.active) battle_overlay(*ov, core().scene);
+    if (g_battle_panel && core().scene.battle.active) battle_overlay(*ov, core().scene);
 
     // Long-press cue on the free overworld (the gesture opens Start).
     const SceneState& s = core().scene;

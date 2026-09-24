@@ -35,7 +35,15 @@ void UiView::prepare(const ViewMemory& m, const FieldView& field, int width, int
         const bool at_left = w[1] <= 2, at_right = w[1] + w[3] >= 28;
         const bool at_top = w[2] <= 2, at_bottom = w[2] + w[4] >= 19;
         const int dx = at_left == at_right ? 0 : at_right ? right : -left;
-        const int dy = at_top ? -top : at_bottom ? bottom : 0;
+        int dy = at_top ? -top : at_bottom ? bottom : 0;
+        if (at_right && !at_left && at_top && top > 0) {
+            // Right-edge menus that open from the top (the field Start menu)
+            // are centred vertically in the view instead of pinned to its top
+            // edge: on a tall phone the top corner is out of thumb reach.
+            const int window_center = int(w[2]) * 8 + int(w[4]) * 4;
+            const int view_center = 80 + (bottom - top) / 2;  // native coords
+            dy = view_center - window_center;
+        }
         if (!dx && !dy) continue;
         // Standard frames occupy one tile column left of the window; dialogue
         // frames (menu.c WindowFunc_DrawDialogueFrame and its custom-tile

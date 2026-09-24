@@ -139,6 +139,13 @@ class Game:
         self.c.call("touch_tap", x=x, y=y, hold_frames=3)
         self.frames(settle)
 
+    def double_tap(self, nx, ny, gap=6, settle=40):
+        x, y = self.view(nx, ny)
+        self.c.call("touch_tap", x=x, y=y, hold_frames=2)
+        self.frames(gap)
+        self.c.call("touch_tap", x=x, y=y, hold_frames=2)
+        self.frames(settle)
+
     def long_press(self, nx, ny, settle=20):
         x, y = self.view(nx, ny)
         self.c.call("touch_long_press", x=x, y=y, hold_frames=34)
@@ -202,8 +209,9 @@ def scenario_long_press_start(g):
     items = g.status()["menu_items"]
     assert items, "start menu items not reported"
     x, y, w, h = items[0]
-    g.tap(x - 60, y + h // 2)          # outside the menu: B closes it
-    assert g.wait_until(lambda: not g.status()["menu"], 60), "tap outside did not close"
+    g.double_tap(x - 60, y + h // 2)   # double tap off the menu: B closes it
+    assert g.wait_until(lambda: not g.status()["menu"], 60), "double tap did not close"
+    assert "double-tap:B" in [a["decision"] for a in g.actions()]
     return {"start_items": len(items)}
 
 
@@ -289,7 +297,7 @@ def scenario_party_menu(g):
     g.tap(48, 50, settle=30)                      # first slot (big box)
     assert g.wait_until(lambda: g.status()["menu"], 90), "slot tap did not open the action menu"
     items = g.status()["menu_items"]
-    g.tap(20, 20, settle=30)                      # outside the popup: B
+    g.double_tap(20, 20)                          # double tap off the popup: B
     assert g.wait_until(lambda: not g.status()["menu"], 90), "popup did not close"
     for _ in range(4):
         if g.cb2() == CB2_OVERWORLD:
@@ -309,13 +317,15 @@ def open_save_prompt(g):
     assert g.wait_until(lambda: g.status()["start_menu"], 60), "start menu did not open"
     count = g.u8(NUM_START_ACTIONS)
     actions = list(g.mem("ewram", START_ACTIONS, count))
-    x, y, w, h = g.status()["menu_items"][actions.index(MENU_ACTION_SAVE)]
+    start_items = g.status()["menu_items"]
+    x, y, w, h = start_items[actions.index(MENU_ACTION_SAVE)]
     g.tap(x + w // 2, y + h // 2, settle=10)
     prompt = lambda: (lambda s: s["menu"] and not s["start_menu"] and s["dialogue_box"]
                       and len(s["menu_items"]) == 2)(g.status())
     assert g.wait_until(prompt, 240, 5), f"save Yes/No prompt did not appear ({g.status()})"
     s = g.status()
     assert s["menu_cursor"] == 0, f"caret should start on YES ({s['menu_cursor']})"
+    s["start_items"] = start_items
     return s
 
 
@@ -361,13 +371,15 @@ def scenario_save_prompt_tap_outside(g):
 
 def scenario_queued_tap(g):
     # A tap while a macro runs is queued and executed, never dropped: tap NO,
-    # then tap outside the Start menu before the NO macro has finished.
+    # then tap where EXIT will be on the Start menu before the NO macro ends.
     s = open_save_prompt(g)
     x, y, w, h = s["menu_items"][1]
     vx, vy = g.view(x + w // 2, y + h // 2)
+    count = g.u8(NUM_START_ACTIONS)
+    ex, ey, ew, eh = s["start_items"][count - 1]  # EXIT is the last Start action
     g.c.call("touch_tap", x=vx, y=vy, hold_frames=2)
     g.frames(3)
-    ox, oy = g.view(40, 120)
+    ox, oy = g.view(ex + ew // 2, ey + eh // 2)
     g.c.call("touch_tap", x=ox, y=oy, hold_frames=2)
     g.frames(4)
     decisions = [a["decision"] for a in g.actions()]
@@ -444,6 +456,53 @@ def scenario_start_menu_slide(g):
     return {"hovered": decisions.count("menu-hover")}
 
 
+def scenario_menu_tap_anywhere_confirms(g):
+    # A single tap off the Start menu confirms the highlighted item (A) once
+    # the double-tap window passes.
+    g.long_press(*tile_center(0, -3))
+    assert g.wait_until(lambda: g.status()["start_menu"], 60), "start menu did not open"
+    count = g.u8(NUM_START_ACTIONS)
+    actions = list(g.mem("ewram", START_ACTIONS, count))
+    cursor = g.status()["menu_cursor"]
+    g.tap(40, 120, settle=40)
+    decisions = [a["decision"] for a in g.actions()]
+    assert "tap-outside-menu:A" in decisions, decisions
+    assert not g.status()["start_menu"], "tap off the menu did not confirm"
+    return {"confirmed_action": actions[cursor]}
+
+
+def scenario_menu_remote_swipe(g):
+    # A vertical drag anywhere off the menu moves its cursor (finger down =
+    # cursor down); the menu stays open.
+    g.long_press(*tile_center(0, -3))
+    assert g.wait_until(lambda: g.status()["start_menu"], 60), "start menu did not open"
+    before = g.status()["menu_cursor"]
+    pts = [(40, 40 + k) for k in range(0, 52, 4)]      # 48 native px down: two steps
+    g.drag(pts, per=2, settle=20)
+    s = g.status()
+    decisions = [a["decision"] for a in g.actions()]
+    assert decisions.count("remote-down") == 2, decisions
+    assert s["start_menu"], "remote swipe closed the menu"
+    count = g.u8(NUM_START_ACTIONS)
+    assert s["menu_cursor"] == (before + 2) % count, (before, s["menu_cursor"])
+    return {"cursor": [before, s["menu_cursor"]]}
+
+
+def scenario_battle_tap_anywhere(g):
+    # Battle action menu (fixture): a tap on the scene confirms the
+    # highlighted FIGHT; a double tap in the move menu backs out to actions.
+    control = lambda: g.status()["battle_control"]
+    assert g.wait_until(lambda: control() == "action", 300), f"not at the action menu ({control()})"
+    assert g.u8(0x020244AC) == 0, "FIGHT should be highlighted in the fixture"
+    g.tap(60, 40, settle=40)                          # battle scene background
+    assert g.wait_until(lambda: control() == "move", 120), f"tap did not confirm FIGHT ({control()})"
+    g.double_tap(60, 40)
+    assert g.wait_until(lambda: control() == "action", 120), f"double tap did not back out ({control()})"
+    decisions = [a["decision"] for a in g.actions()]
+    assert "tap-outside-menu:A" in decisions and "double-tap:B" in decisions, decisions
+    return {"decisions": decisions[-4:]}
+
+
 BATTLE_MAIN_CB2 = 0x08038420
 
 
@@ -503,6 +562,7 @@ def scenario_wild_battle(g):
 # Scenarios that need another fixture (resolved next to --state).
 SCENARIO_FIXTURES = {
     "stale_script_wait": "door_menu.state",   # Littleroot: NPCs in view
+    "battle_tap_anywhere": "wild_battle.state",  # saved at the action menu
 }
 
 SCENARIOS = {
@@ -517,6 +577,9 @@ SCENARIOS = {
     "queued_tap": scenario_queued_tap,
     "stale_script_wait": scenario_stale_script_wait,
     "start_menu_slide": scenario_start_menu_slide,
+    "menu_tap_anywhere_confirms": scenario_menu_tap_anywhere_confirms,
+    "menu_remote_swipe": scenario_menu_remote_swipe,
+    "battle_tap_anywhere": scenario_battle_tap_anywhere,
 }
 
 

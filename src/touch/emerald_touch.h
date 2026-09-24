@@ -122,6 +122,11 @@ struct Core {
     // finishes (bounded, and only while fresh) instead of being dropped.
     struct PendingTap { gbarecomp::Gesture g; std::uint64_t frame = 0; };
     std::vector<PendingTap> pending_taps;
+    // A tap off the items of an open menu waits one double-tap window:
+    // alone it confirms the highlighted choice (A); a second tap inside the
+    // window makes it B (close / back / No).
+    struct MenuTap { bool active = false; gbarecomp::Gesture g; std::uint64_t frame = 0; };
+    MenuTap pending_menu_tap;
 };
 Core& core();
 

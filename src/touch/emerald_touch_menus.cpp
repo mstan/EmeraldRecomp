@@ -49,6 +49,15 @@ struct MenuDrag {
 };
 MenuDrag g_menu_drag;
 
+// A vertical drag anywhere off an open menu/list steers its cursor like a
+// thumb wheel: finger down = cursor down, one step per kRemoteStep view px.
+struct RemoteDrag {
+    bool active = false;
+    float last_vy = 0, accum = 0;
+};
+RemoteDrag g_remote_drag;
+constexpr float kRemoteStep = 24.0f;
+
 int menu_item_at(const MenuState& m, float nx, float ny) {
     for (int i = m.min; i <= m.max; ++i)
         if (m.item(i).contains(nx, ny, 1.0f)) return i;
@@ -193,10 +202,31 @@ bool menus_drag(Core& core, const SceneState& s, const k::Gesture& g) {
             g_list_drag.last_ny = sy;
         } else if (s.menu.live && s.menu.window_rect.contains(sx, sy, 2.0f)) {
             g_menu_drag = {true, s.menu.window, -1};
+        } else if (s.menu.live || s.list.live) {
+            g_menu_drag = {};
+            g_remote_drag = {true, g.start_view_y, 0.0f};
         } else {
             g_menu_drag = {};
+            g_remote_drag = {};
             return false;
         }
+    }
+    if (g_remote_drag.active) {
+        if (g.kind == k::GestureKind::DragEnd || g.kind == k::GestureKind::Cancel ||
+            (!s.menu.live && !s.list.live)) {
+            g_remote_drag = {};
+            return true;
+        }
+        g_remote_drag.accum += g.view_y - g_remote_drag.last_vy;
+        g_remote_drag.last_vy = g.view_y;
+        while (std::fabs(g_remote_drag.accum) >= kRemoteStep) {
+            const bool down = g_remote_drag.accum > 0;
+            core.synth.tap(down ? k::kGbaKeyDown : k::kGbaKeyUp, 1, 1);
+            g_remote_drag.accum += down ? -kRemoteStep : kRemoteStep;
+            record_action(core.frame, "drag", scene_name(s.kind),
+                          down ? "remote-down" : "remote-up", nx, ny, 0);
+        }
+        return true;
     }
     if (g_menu_drag.active) {
         const bool ending = g.kind == k::GestureKind::DragEnd ||
