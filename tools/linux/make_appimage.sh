@@ -30,8 +30,29 @@ mkdir -p "$OUT"
 # Build tree on the Linux filesystem (fast, persistent between releases).
 CACHE="${EMERALDRECOMP_BUILD_CACHE:-$HOME/.cache/emeraldrecomp-release}"
 mkdir -p "$CACHE"
-MOUNTS=(-v "$GAME:/src/game:ro" -v "$ENGINE:/src/engine:ro" -v "$UI:/src/ui:ro" -v "$OUT:/out")
-if [[ -n "$PRIVATE" ]]; then MOUNTS+=(-v "$PRIVATE:/private:ro"); fi
+# Stage the sources on the Linux filesystem first: bind-mounting multi-GB
+# Windows (/mnt/<drive>) trees into Docker Desktop routes every read through
+# its file-sharing layer (slow, and it balloons com.docker.backend's memory).
+# ROMs, BIOS dumps and build outputs are never staged.
+STAGE="$CACHE/src"
+mkdir -p "$STAGE"
+EXCLUDES=(--exclude '.git' --exclude 'build/' --exclude 'build-*/' --exclude 'release-stage/'
+          --exclude 'recomp_cache/' --exclude '*.gba' --exclude '*.sav' --exclude '*.state*'
+          --exclude 'gba_bios.bin' --exclude 'android/app/build/' --exclude 'android/build/'
+          --exclude 'android/.gradle/' --exclude 'android/app/.cxx/')
+rsync -a --delete "${EXCLUDES[@]}" --exclude 'third_party/pokeemerald/' --exclude 'docs/screenshots/' \
+    "$GAME/" "$STAGE/game/"
+rsync -a --delete "${EXCLUDES[@]}" --exclude 'tools/gbaref/' --exclude 'oracle/' "$ENGINE/" "$STAGE/engine/"
+rsync -a --delete "${EXCLUDES[@]}" "$UI/" "$STAGE/ui/"
+MOUNTS=(-v "$STAGE/game:/src/game:ro" -v "$STAGE/engine:/src/engine:ro" -v "$STAGE/ui:/src/ui:ro"
+        -v "$OUT:/out")
+if [[ -n "$PRIVATE" ]]; then
+    # Smoke-test ROM/BIOS: a private copy on the Linux side, removed on exit.
+    PRIV_STAGE="$(mktemp -d "$CACHE/private.XXXXXX")"
+    trap 'rm -rf "$PRIV_STAGE"' EXIT
+    cp "$PRIVATE/gba_bios.bin" "$PRIVATE/emerald_usa.gba" "$PRIV_STAGE/"
+    MOUNTS+=(-v "$PRIV_STAGE:/private:ro")
+fi
 # Build as the invoking user so /out stays owned by them.
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e VERSION="$VERSION" -e JOBS="$JOBS" \
     -v "$CACHE:/build" "${MOUNTS[@]}" "$IMAGE" \
