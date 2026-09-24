@@ -20,10 +20,11 @@ Steps:
   3. Windows (MinGW Release) zip.
   4. Linux AppImage via WSL + Docker (tools/linux/make_appimage.sh; Ubuntu 22.04
      builder, engine-pinned SDL bundled).
-  5. Android release APK (arm64). Signed with a release key when
-     GBARECOMP_KEYSTORE / GBARECOMP_KEYSTORE_PASSWORD / GBARECOMP_KEY_ALIAS
-     (and optionally GBARECOMP_KEY_PASSWORD) are set; otherwise the local
-     debug key, with a loud warning.
+  5. Android release APK (arm64), signed with the release key from the
+     gitignored android/signing.local.properties (or GBARECOMP_KEYSTORE /
+     _KEYSTORE_PASSWORD / GBARECOMP_KEY_ALIAS). A debug-signed APK is refused
+     unless -AllowDebugSigning. Keys live outside the repo; see
+     F:\Projects\Android\README.md on the release machine.
 
 Publish via gh AFTER the user signs off:
 
@@ -41,7 +42,8 @@ param(
   [string]$Rom,
   [string]$Bios,
   [int]$Jobs = 8,
-  [switch]$AllowDirty
+  [switch]$AllowDirty,
+  [switch]$AllowDebugSigning
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be X.Y.Z (got '$Version')" }
@@ -335,8 +337,14 @@ if ($Platforms -contains 'android') {
   }
   Write-Host ([regex]::Match($signer.Output, 'Signer #1 certificate DN: .*').Value)
   if ($signer.Output -match 'CN=Android Debug') {
-    Write-Warning 'The Android APK is signed with the local DEBUG key. Set GBARECOMP_KEYSTORE / _PASSWORD / GBARECOMP_KEY_ALIAS for a release key before publishing.'
+    # A debug-signed release could never be updated in place from another
+    # machine; refuse unless explicitly allowed.
+    if (-not $AllowDebugSigning) {
+      throw 'The Android APK is signed with the local DEBUG key. Configure android/signing.local.properties (or GBARECOMP_KEYSTORE / _PASSWORD / GBARECOMP_KEY_ALIAS), or pass -AllowDebugSigning.'
+    }
+    Write-Warning 'The Android APK is signed with the local DEBUG key (-AllowDebugSigning).'
   }
+  Write-Host ([regex]::Match($signer.Output, 'Signer #1 certificate SHA-256 digest: .*').Value)
   $artifacts.Add($apk)
   Write-Host "android: $apk"
 }

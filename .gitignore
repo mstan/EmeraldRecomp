@@ -107,3 +107,8 @@ android/app/build/
 android/app/.cxx/
 *.apk
 *.aab
+
+# Android signing material stays local (see F:\Projects\Android\README.md).
+signing.local.properties
+*.jks
+*.keystore
