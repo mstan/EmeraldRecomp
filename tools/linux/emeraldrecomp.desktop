@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=EmeraldRecomp
+GenericName=Pokémon Emerald (native port)
+Comment=Static recompilation of Pokémon Emerald. Supply your own ROM and GBA BIOS.
+Exec=EmeraldRecomp
+Icon=emeraldrecomp
+Terminal=false
+Categories=Game;

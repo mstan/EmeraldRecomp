@@ -15,8 +15,8 @@ def recompUiRoot = pick("recompUiRoot", "RECOMP_UI_ROOT", new File(gameRoot, "re
 
 ext.gbaGame = [
     applicationId : "com.mstan.emeraldrecomp",
-    versionCode   : 1,
-    versionName   : "0.1.0-touch",
+    versionCode   : 7,
+    versionName   : "0.0.7",
     title         : "Pokémon Emerald",
     romLabel      : "Pokémon Emerald (USA) ROM",
     romSha1       : ["f3ae088181bf583e55daf962a92bb46f4f1d07b7"],

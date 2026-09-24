@@ -1,130 +1,196 @@
 <#
-make_release.ps1 - build the EmeraldRecomp windows release zip.
+make_release.ps1 - build every EmeraldRecomp release artifact.
 
-Modeled on the snesrecomp Zelda ALttP release script, adapted for the GBA
-MinGW / CMake / Ninja toolchain:
+  release-stage\EmeraldRecomp-windows-x64-v<Version>.zip
+  release-stage\EmeraldRecomp-linux-x86_64-v<Version>.AppImage
+  release-stage\EmeraldRecomp-android-arm64-v<Version>.apk
+  release-stage\SHA256SUMS.txt
 
-  EmeraldRecomp-windows-x64-v<Version>.zip
+Every artifact is bring-your-own-ROM: the ROM and the GBA BIOS are never
+bundled. Each is scanned for private assets (by name, size and the GBA
+cartridge header) before it is accepted, and the desktop builds are smoke-run
+headless against your local ROM + BIOS (must report FULLY_STATIC).
 
-Ships ONLY a zip (never a bare exe; the MinGW exe needs the bundled runtime
-DLLs). The zip contains: EmeraldRecomp.exe (Release, MinGW, stripped) + the four
-runtime DLLs (SDL2.dll, libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll)
-+ README.md.
+Steps:
+  1. Pins: the engine (-EngineRoot) and recomp-ui (-RecompUiRoot) checkouts
+     must be at exactly the commits this repo pins, with no uncommitted build
+     inputs; this repo must have no uncommitted tracked changes.
+  2. Build the engine's gba_recompile and regenerate variants/emerald/generated
+     from your ROM (generated C is never committed; it is derived per build).
+  3. Windows (MinGW Release) zip.
+  4. Linux AppImage via WSL + Docker (tools/linux/make_appimage.sh; Ubuntu 22.04
+     builder, engine-pinned SDL bundled).
+  5. Android release APK (arm64). Signed with a release key when
+     GBARECOMP_KEYSTORE / GBARECOMP_KEYSTORE_PASSWORD / GBARECOMP_KEY_ALIAS
+     (and optionally GBARECOMP_KEY_PASSWORD) are set; otherwise the local
+     debug key, with a loud warning.
 
-You supply your own legally-obtained ROM and a GBA BIOS dump (gba_bios.bin) on
-first run - the runtime's native picker caches the chosen paths to rom.cfg /
-bios.cfg next to the exe. Neither the ROM nor the BIOS is ever redistributed.
+Publish via gh AFTER the user signs off:
 
-Zips land in release-stage\. Publish via gh AFTER the user signs off:
+  gh release create v<Version> release-stage\EmeraldRecomp-*-v<Version>.* release-stage\SHA256SUMS.txt
 
-  gh release create v<Version> `
-      release-stage\EmeraldRecomp-windows-x64-v<Version>.zip
-
-Usage: powershell -File tools\make_release.ps1 -Version 0.0.2
+Usage:
+  powershell -File tools\make_release.ps1 -Version 0.0.7 -RecompUiRoot <recomp-ui checkout>
+  powershell -File tools\make_release.ps1 -Version 0.0.7 -Platforms windows,android
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Version,
-  [string]$BuildDir = 'build-release'
+  [ValidateSet('windows', 'linux', 'android')][string[]]$Platforms = @('windows', 'linux', 'android'),
+  [string]$EngineRoot,
+  [string]$RecompUiRoot,
+  [string]$Rom,
+  [string]$Bios,
+  [int]$Jobs = 8,
+  [switch]$AllowDirty
 )
 $ErrorActionPreference = 'Stop'
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be X.Y.Z (got '$Version')" }
 
 $MingwBin = 'C:\msys64\mingw64\bin'
 $env:PATH = "$MingwBin;$env:PATH"
-$root  = Split-Path -Parent $PSScriptRoot
-$build = Join-Path $root $BuildDir
-$out   = Join-Path $root 'release-stage'
+$root = Split-Path -Parent $PSScriptRoot
+if (-not $EngineRoot) { $EngineRoot = Join-Path $root '..\gbarecomp' }
+if (-not $RecompUiRoot) { $RecompUiRoot = Join-Path $root '..\recomp-ui' }
+if (-not $Rom) { $Rom = Join-Path $root 'variants\emerald\roms\emerald_usa.gba' }
+$EngineRoot = (Resolve-Path -LiteralPath $EngineRoot).Path
+$RecompUiRoot = (Resolve-Path -LiteralPath $RecompUiRoot).Path
+$Rom = (Resolve-Path -LiteralPath $Rom).Path
+if (-not $Bios) { $Bios = Join-Path $EngineRoot 'bios\gba_bios.bin' }
+$Bios = (Resolve-Path -LiteralPath $Bios).Path
+$out = Join-Path $root 'release-stage'
 New-Item -ItemType Directory -Force $out | Out-Null
+$artifacts = [System.Collections.Generic.List[string]]::new()
 
-# Games this repo ships: CMake target -> README title + decomp variant (for the
-# ROM SHA-1 surfaced in the README).
-$games = @(
-  @{ Target = 'EmeraldRecomp'; Title = 'Pokemon Emerald'; Variant = 'emerald' }
-)
-$dlls = @('SDL2.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll')
-
-# Configure once (Release; dynamic + bundled DLLs). GBARECOMP_ROOT defaults to
-# ../gbarecomp (the engine checkout) via this repo's CMakeLists. SDL2 is located
-# through the msys2 mingw64 prefix - passed explicitly so a fresh checkout
-# configures without relying on auto-detection.
-if (-not (Test-Path (Join-Path $build 'CMakeCache.txt'))) {
-  & "$MingwBin\cmake.exe" -S $root -B $build -G Ninja `
-      -DCMAKE_C_COMPILER="$MingwBin/cc.exe" `
-      -DCMAKE_CXX_COMPILER="$MingwBin/c++.exe" `
-      -DCMAKE_MAKE_PROGRAM="$MingwBin/ninja.exe" `
-      -DCMAKE_BUILD_TYPE=Release "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG" `
-      -DGBARECOMP_BUILD_ORACLE=OFF `
-      -DGBARECOMP_MINGW_PREFIX_UNIX="/c/msys64/mingw64" `
-      -DSDL2_INCLUDE_DIR="C:/msys64/mingw64/include/SDL2" `
-      -DSDL2_LIBRARY="C:/msys64/mingw64/lib/libSDL2.dll.a"
-  if ($LASTEXITCODE -ne 0) { throw "configure failed ($LASTEXITCODE)" }
+function Invoke-Native {
+  param([string]$File, [string[]]$Arguments, [string]$What)
+  & $File @Arguments
+  if ($LASTEXITCODE -ne 0) { throw "$What failed ($LASTEXITCODE)" }
 }
 
-foreach ($g in $games) {
-  $target = $g.Target
-  & "$MingwBin\cmake.exe" --build $build --target $target
-  if ($LASTEXITCODE -ne 0) { throw "build failed for $target ($LASTEXITCODE)" }
+# Run a native tool, capturing stdout+stderr (PowerShell 5.1 turns redirected
+# native stderr into terminating errors under ErrorActionPreference=Stop).
+function Invoke-Captured {
+  param([string]$File, [string[]]$Arguments, [string]$WorkingDirectory = (Get-Location).Path)
+  $stdout = [IO.Path]::GetTempFileName()
+  $stderr = [IO.Path]::GetTempFileName()
+  try {
+    $quoted = $Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }
+    $p = Start-Process -FilePath $File -ArgumentList $quoted -WorkingDirectory $WorkingDirectory `
+        -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $p.PriorityClass = 'BelowNormal'
+    $p.WaitForExit()
+    [pscustomobject]@{ ExitCode = $p.ExitCode
+                       Output = ([IO.File]::ReadAllText($stdout) + [IO.File]::ReadAllText($stderr)) }
+  } finally {
+    [IO.File]::Delete($stdout)
+    [IO.File]::Delete($stderr)
+  }
+}
 
-  $exe = Join-Path $build "$target.exe"
-  if (-not (Test-Path $exe)) { throw "expected exe missing: $exe" }
+function Assert-Pinned {
+  param([string]$Checkout, [string]$Gitlink, [string[]]$InputPaths)
+  $pin = ((git -C $root ls-tree HEAD $Gitlink) -split '\s+')[2]
+  $head = (git -C $Checkout rev-parse HEAD).Trim()
+  if ($pin -ne $head) { throw "$Gitlink pin is $pin but $Checkout is at $head" }
+  $dirty = @(git -C $Checkout status --porcelain --untracked-files=no -- @InputPaths)
+  if ($dirty.Count -and -not $AllowDirty) {
+    throw "$Checkout has uncommitted build inputs:`n$($dirty -join "`n")"
+  }
+  Write-Host "pinned $Gitlink = $head"
+}
+
+# Reject anything that looks like a ROM, BIOS or save (name, size, header).
+function Assert-NoPrivateAssets {
+  param([string]$Dir)
+  $bad = @(Get-ChildItem -LiteralPath $Dir -Recurse -File | Where-Object {
+    $n = $_.Name.ToLowerInvariant()
+    if ($n -match '\.(gba|agb|sav)$' -or $n -eq 'gba_bios.bin' -or
+        ($_.Length -eq 16384 -and $n.EndsWith('.bin'))) { return $true }
+    if ($_.Length -lt 0xC0) { return $false }
+    $fs = [IO.File]::OpenRead($_.FullName)
+    try { $h = New-Object byte[] 0xB0; [void]$fs.Read($h, 0, 0xB0) } finally { $fs.Dispose() }
+    [Text.Encoding]::ASCII.GetString($h, 0xA0, 16) -eq 'POKEMON EMERBPEE'
+  })
+  if ($bad.Count) { throw "private assets in ${Dir}:`n$(($bad | ForEach-Object FullName) -join "`n")" }
+}
+
+function Get-WslPath([string]$Path) {
+  $full = [IO.Path]::GetFullPath($Path)
+  '/mnt/' + $full.Substring(0, 1).ToLowerInvariant() + $full.Substring(2).Replace('\', '/')
+}
+
+# ── 1. Pins ────────────────────────────────────────────────────────────────
+if (-not $AllowDirty) {
+  $selfDirty = @(git -C $root status --porcelain --untracked-files=no)
+  if ($selfDirty.Count) { throw "EmeraldRecomp has uncommitted changes:`n$($selfDirty -join "`n")" }
+}
+Assert-Pinned -Checkout $EngineRoot -Gitlink 'gbarecomp' `
+    -InputPaths @('src', 'tools', 'platform', 'cmake', 'CMakeLists.txt', 'external', 'bios')
+Assert-Pinned -Checkout $RecompUiRoot -Gitlink 'recomp-ui' -InputPaths @('.')
+$romSha = (Get-FileHash -Algorithm SHA1 -LiteralPath $Rom).Hash.ToLowerInvariant()
+if ($romSha -ne 'f3ae088181bf583e55daf962a92bb46f4f1d07b7') { throw "ROM SHA-1 $romSha is not Emerald (USA)" }
+
+# ── 2. Recompile ───────────────────────────────────────────────────────────
+$toolBuild = Join-Path $root 'build-release-tool'
+Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G', 'Ninja',
+    "-DCMAKE_C_COMPILER=$MingwBin/cc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/c++.exe",
+    "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
+    '-DGBARECOMP_BUILD_ORACLE=OFF') 'engine tool configure'
+Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile') 'gba_recompile build'
+$regen = Invoke-Captured -File (Join-Path $toolBuild 'gba_recompile.exe') -WorkingDirectory (Join-Path $root 'variants\emerald') `
+    -Arguments @('--rom', $Rom, '--config', 'game.toml', '--config', 'symbols/BPEE_symbols.toml',
+                 '--config', 'symbols/BPEE_reviewed_seeds.toml', '--symbols', 'symbols/imported_symbols.tsv',
+                 '--data-symbols', 'symbols/imported_data_symbols.tsv', '--out', 'generated',
+                 '--max-functions', '65536')
+$regen.Output | Out-File (Join-Path $toolBuild 'regen.log') -Encoding utf8
+if ($regen.ExitCode -ne 0) { $regen.Output; throw "gba_recompile failed ($($regen.ExitCode))" }
+[regex]::Matches($regen.Output, '==> discovered .*') | ForEach-Object { Write-Host $_.Value }
+
+# ── 3. Windows ─────────────────────────────────────────────────────────────
+if ($Platforms -contains 'windows') {
+  $build = Join-Path $root 'build-release-windows'
+  # Always (re)state the roots so a reused cache can never point elsewhere.
+  Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
+      "-DCMAKE_C_COMPILER=$MingwBin/cc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/c++.exe",
+      "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
+      '-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF',
+      "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
+      "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
+      "-DGBARECOMP_RUNTIME_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
+      '-DGBARECOMP_MINGW_PREFIX_UNIX=/c/msys64/mingw64',
+      '-DSDL2_INCLUDE_DIR=C:/msys64/mingw64/include/SDL2',
+      '-DSDL2_LIBRARY=C:/msys64/mingw64/lib/libSDL2.dll.a') 'windows configure'
+  $p = Start-Process -FilePath "$MingwBin\cmake.exe" -NoNewWindow -PassThru `
+      -ArgumentList @('--build', "`"$build`"", '--target', 'EmeraldRecomp', '-j', $Jobs)
+  $p.PriorityClass = 'BelowNormal'
+  $p.WaitForExit()
+  if ($p.ExitCode -ne 0) { throw "windows build failed ($($p.ExitCode))" }
+
+  $exe = Join-Path $build 'EmeraldRecomp.exe'
   & "$MingwBin\strip.exe" $exe
-
-  $stageName = "$target-windows-x64-v$Version"
+  $stageName = "EmeraldRecomp-windows-x64-v$Version"
   $stage = Join-Path $out $stageName
-  $stageFull = [IO.Path]::GetFullPath($stage)
-  $outPrefix = [IO.Path]::GetFullPath($out).TrimEnd('\') + '\'
-  if (-not $stageFull.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Release stage escapes output directory: $stageFull"
-  }
-  if (Test-Path -LiteralPath $stageFull) { Remove-Item -LiteralPath $stageFull -Recurse -Force }
+  if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
   New-Item -ItemType Directory -Force $stage | Out-Null
-
   Copy-Item $exe $stage
-  foreach ($d in $dlls) { Copy-Item (Join-Path $MingwBin $d) $stage }
-
-  # recomp-ui launcher assets (fonts + img TGAs incl. this variant's box art),
-  # staged next to the exe by recomp_target_launcher_ui's POST_BUILD. The
-  # launcher loads them from <exe>ssets\ at runtime.
+  foreach ($d in @('SDL2.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll')) {
+    Copy-Item (Join-Path $MingwBin $d) $stage
+  }
   $assets = Join-Path $build 'assets'
-  if (-not (Test-Path (Join-Path $assets 'img'))) {
-    throw "recomp-ui launcher assets missing: $assets (build with GBAGAME_RECOMP_UI=ON)"
-  }
+  if (-not (Test-Path (Join-Path $assets 'img'))) { throw "recomp-ui launcher assets missing: $assets" }
   Copy-Item $assets -Destination $stage -Recurse
-
-
-  # Game-owned mod catalog, staged next to the exe by the CMake POST_BUILD
-  # copy. The launcher seam resolves the catalog at <exe>/mods, so without
-  # this the shipped archive has an empty Mods page even though a local build
-  # works. Data only -- no ROM-derived content.
-  # Use the checked-in catalog, never a build directory's remembered user
-  # selections or private asset paths. Features ship at their default state.
-  $mods = Join-Path $root 'mods\preloaded'
-  if (-not (Test-Path (Join-Path $mods 'packages'))) {
-    throw "Mod catalog missing: $mods (build with GBARECOMP_ENABLE_MODS=ON)"
-  }
-  Copy-Item -LiteralPath $mods -Destination (Join-Path $stage 'mods') -Recurse
+  # Checked-in mod catalog only, never a build dir's remembered selections.
+  Copy-Item -LiteralPath (Join-Path $root 'mods\preloaded') -Destination (Join-Path $stage 'mods') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
-  # Bundle the self-contained tcc overlay toolchain (TinyCC + overlay shim
-  # headers) next to the exe so a toolchain-less player box self-heals overlay
-  # gaps via tcc (overlay backend auto -> tcc). See gbarecomp/tools/fetch_tcc.ps1.
-  # Respect an explicitly configured sibling/worktree engine checkout.
-  $engineSetting = Select-String -LiteralPath (Join-Path $build 'CMakeCache.txt') -Pattern '^GBARECOMP_ROOT:PATH=(.+)$'
-  if (-not $engineSetting) { throw 'Configured GBARECOMP_ROOT is missing from CMakeCache.txt' }
-  $engine = (Resolve-Path -LiteralPath $engineSetting.Matches[0].Groups[1].Value).Path
-  & (Join-Path $engine 'tools\fetch_tcc.ps1') -Toolchain (Join-Path $stage 'overlay_toolchain') -EngineRoot $engine
-
-  # ROM SHA-1 from the variant's game.toml (best-effort; for the README only).
-  $sha = ''
-  $toml = Join-Path $root "variants\$($g.Variant)\game.toml"
-  if (Test-Path $toml) {
-    $m = Select-String -Path $toml -Pattern '^\s*sha1\s*=\s*"([0-9a-fA-F]+)"' | Select-Object -First 1
-    if ($m) { $sha = $m.Matches[0].Groups[1].Value }
-  }
+  # Self-contained tcc overlay toolchain so toolchain-less players self-heal
+  # overlay gaps (see gbarecomp/tools/fetch_tcc.ps1).
+  & (Join-Path $EngineRoot 'tools\fetch_tcc.ps1') -Toolchain (Join-Path $stage 'overlay_toolchain') -EngineRoot $EngineRoot
 
   @"
-# $($g.Title) - GBA static recompilation (Windows x64)
+# Pokemon Emerald - GBA static recompilation (Windows x64) v$Version
 
-Release build: an optimized native port. Running ``$target.exe`` opens a picker
-for your ROM (and, on first run, your GBA BIOS), then the game window.
+Release build: an optimized native port. Running ``EmeraldRecomp.exe`` opens the
+launcher; pick your ROM (and, on first run, your GBA BIOS) and play.
 
 Static recompilation turns the game's ARM7TDMI code into native C++ (via the
 [gbarecomp](https://github.com/mstan/gbarecomp) framework); the rest of the GBA
@@ -133,9 +199,10 @@ GBA BIOS is recompiled and executed; supply your own BIOS dump.
 
 ## How to run
 
-1. Extract this folder (keep the four DLLs next to ``$target.exe``).
-2. Run ``$target.exe``. On first launch it prompts for:
-   - your legally-obtained **$($g.Title) (USA)** ROM (``.gba``)$(if ($sha) { " - expected SHA-1 ``$sha``" })
+1. Extract this folder (keep the four DLLs next to ``EmeraldRecomp.exe``).
+2. Run ``EmeraldRecomp.exe``. On first launch it asks for:
+   - your legally-obtained **Pokemon Emerald (USA)** ROM (``.gba``) - expected SHA-1
+     ``f3ae088181bf583e55daf962a92bb46f4f1d07b7``
    - a **GBA BIOS** dump (``gba_bios.bin``).
    The picked paths are cached to ``rom.cfg`` / ``bios.cfg`` next to the exe;
    save data lands next to the exe.
@@ -146,77 +213,130 @@ The ROM and BIOS are **never** redistributed - supply your own dumps.
 
 Open **Mods**, enable **Overworld Widescreen (Experimental)**, and choose
 **Fit to window**, **16:9**, **21:9** or **32:9**. Apply the selection and play.
-The feature ships disabled and preserves native gameplay and save data.
-Fit fills landscape and portrait windows with additional scenery and live NPCs.
-Overworld menus anchor to the viewport edges, and door animations keep the
-expanded scenery visible. Battles retain their native 3:2 view with black margins.
-Mod 0.2.0 requires this v0.0.6-or-newer executable. Distant object spawning and
-special field effects retain the original game's limits.
+The feature ships disabled and preserves native gameplay and save data. Fit
+fills landscape and portrait windows with additional scenery and live NPCs;
+the Start menu stays in reach at the right edge. Battles retain their native
+3:2 view.
 
 See the GitHub release notes for what changed in v$Version.
 "@ | Out-File (Join-Path $stage 'README.md') -Encoding utf8
+
+  Assert-NoPrivateAssets $stage
+
+  # Headless smoke run from a scratch copy (the stage must stay pristine: a
+  # run writes rom.cfg / bios.cfg / coverage files next to the exe).
+  $smoke = Join-Path $env:TEMP "emeraldrecomp-smoke-$Version"
+  if (Test-Path $smoke) { Remove-Item $smoke -Recurse -Force }
+  Copy-Item $stage $smoke -Recurse
+  try {
+    $env:GBARECOMP_STRICT_STATIC = '1'
+    $run = Invoke-Captured -File (Join-Path $smoke 'EmeraldRecomp.exe') -WorkingDirectory $smoke `
+        -Arguments @('--no-launcher', '--no-window', '--frames', '1500', '--bios', $Bios, '--rom', $Rom,
+                     '--save-path', (Join-Path $smoke 'smoke.sav'))
+    if ($run.Output -notmatch 'self_heal_coverage=FULLY_STATIC') { $run.Output; throw 'windows smoke test is not FULLY_STATIC' }
+    Write-Host 'windows smoke: FULLY_STATIC'
+  } finally {
+    $env:GBARECOMP_STRICT_STATIC = $null
+    Remove-Item -LiteralPath $smoke -Recurse -Force -ErrorAction SilentlyContinue
+  }
 
   $zip = Join-Path $out "$stageName.zip"
   if (Test-Path $zip) { Remove-Item -Force $zip }
   Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-  # ZIP entry names must always use '/', regardless of the host OS.
-  # Compress-Archive preserves Windows backslashes, which POSIX extractors
-  # treat as literal filename characters rather than directory separators -- so
-  # a Linux / Steam Deck / Proton user gets files literally named
-  # "assets\fonts\LatoLatin-Regular.ttf" (and "mods\packages\..." where the
-  # game ships a mod catalog), the nested trees are never created, and the
-  # ImGui launcher finds neither its fonts nor its mods. Write portably here,
-  # then verify before anyone can publish it.
-  # (Convention ported from snesrecomp/SuperMarioWorldRecomp.)
-  $rzStageFull = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $stage).Path)
-  $rzZipFull = [IO.Path]::GetFullPath($zip)
-  $rzPrefix = $rzStageFull.TrimEnd('\') + '\'
-  $rzFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse |
-      Sort-Object FullName)
-  $rzArchive = [IO.Compression.ZipFile]::Open(
-      $rzZipFull, [IO.Compression.ZipArchiveMode]::Create)
+  # ZIP entry names must use '/' (Compress-Archive keeps '\', which POSIX
+  # extractors treat as literal filename characters). Write portably, then
+  # read back and verify before anyone can publish it.
+  $stageFull = [IO.Path]::GetFullPath($stage).TrimEnd('\') + '\'
+  $files = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName)
+  $archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
   try {
-      foreach ($rzFile in $rzFiles) {
-          $rzFull = [IO.Path]::GetFullPath($rzFile.FullName)
-          if (-not $rzFull.StartsWith(
-                  $rzPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "Refusing to archive a file outside the release stage: $rzFull"
-          }
-          $rzName = $rzFull.Substring($rzPrefix.Length).Replace('\', '/')
-          if ($rzName.StartsWith('/') -or $rzName -match '(^|/)\.\.(/|$)') {
-              throw "Unsafe ZIP entry name: $rzName"
-          }
-          [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-              $rzArchive, $rzFull, $rzName,
-              [IO.Compression.CompressionLevel]::Optimal) | Out-Null
-      }
-  } finally {
-      $rzArchive.Dispose()
-  }
-
-  # Read the archive back and reject non-portable entry names outright, so a
-  # regression in the writer cannot ship a Windows-only zip again.
-  $rzArchive = [IO.Compression.ZipFile]::OpenRead($rzZipFull)
+    foreach ($f in $files) {
+      $name = $f.FullName.Substring($stageFull.Length).Replace('\', '/')
+      if ($name.StartsWith('/') -or $name -match '(^|/)\.\.(/|$)') { throw "Unsafe ZIP entry name: $name" }
+      [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $f.FullName, $name,
+          [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+  } finally { $archive.Dispose() }
+  $archive = [IO.Compression.ZipFile]::OpenRead($zip)
   try {
-      $rzBad = @($rzArchive.Entries | Where-Object {
-          $_.FullName.Contains('\') -or
-          $_.FullName.StartsWith('/') -or
-          $_.FullName -match '(^|/)\.\.(/|$)'
-      })
-      if ($rzBad.Count -ne 0) {
-          throw "ZIP contains non-portable entry names: $(
-              ($rzBad | ForEach-Object FullName) -join ', ')"
-      }
-      if ($rzArchive.Entries.Count -ne $rzFiles.Count) {
-          throw "ZIP entry count mismatch: expected $($rzFiles.Count), got $(
-              $rzArchive.Entries.Count)"
-      }
-  } finally {
-      $rzArchive.Dispose()
-  }
-  Write-Host "--- $stageName ---"
-  Get-ChildItem $stage | Select-Object Name, Length | Out-Host
-  Get-Item $zip | Select-Object Name, Length | Out-Host
+    $badNames = @($archive.Entries | Where-Object { $_.FullName.Contains('\') -or $_.FullName.StartsWith('/') })
+    if ($badNames.Count -or $archive.Entries.Count -ne $files.Count) { throw 'ZIP verification failed' }
+  } finally { $archive.Dispose() }
+  $artifacts.Add($zip)
+  Write-Host "windows: $zip"
 }
+
+# ── 4. Linux AppImage ──────────────────────────────────────────────────────
+if ($Platforms -contains 'linux') {
+  # Private assets for the container smoke test: a scratch copy, mounted
+  # read-only, deleted afterwards. They never enter the image.
+  $private = Join-Path $env:TEMP "emeraldrecomp-private-$([guid]::NewGuid().ToString('N'))"
+  New-Item -ItemType Directory $private | Out-Null
+  try {
+    Copy-Item -LiteralPath $Bios (Join-Path $private 'gba_bios.bin')
+    Copy-Item -LiteralPath $Rom (Join-Path $private 'emerald_usa.gba')
+    $env:MSYS_NO_PATHCONV = '1'
+    Invoke-Native 'wsl' @('-e', 'bash', (Get-WslPath (Join-Path $root 'tools\linux\make_appimage.sh')),
+        '--version', $Version, '--game', (Get-WslPath $root), '--engine', (Get-WslPath $EngineRoot),
+        '--ui', (Get-WslPath $RecompUiRoot), '--out', (Get-WslPath $out),
+        '--private', (Get-WslPath $private), '--jobs', "$Jobs") 'linux AppImage build'
+  } finally { Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue }
+  $appimage = Join-Path $out "EmeraldRecomp-linux-x86_64-v$Version.AppImage"
+  if (-not (Test-Path $appimage)) { throw "AppImage missing: $appimage" }
+  $artifacts.Add($appimage)
+  Write-Host "linux: $appimage"
+}
+
+# ── 5. Android ─────────────────────────────────────────────────────────────
+if ($Platforms -contains 'android') {
+  $parts = $Version.Split('.') | ForEach-Object { [int]$_ }
+  $env:GBARECOMP_VERSION_NAME = $Version
+  $env:GBARECOMP_VERSION_CODE = "$($parts[0] * 10000 + $parts[1] * 100 + $parts[2])"
+  try {
+    # No -PrivateRom / -PrivateBios: the template's verifyNoPrivateAssets
+    # fails the build if a ROM or BIOS reaches the payload.
+    & (Join-Path $EngineRoot 'platform\android\tools\build-apk.ps1') -GameAndroidDir (Join-Path $root 'android') `
+        -EngineRoot $EngineRoot -RecompUiRoot $RecompUiRoot -Release -Abis 'arm64-v8a' -Jobs $Jobs
+    if ($LASTEXITCODE -ne 0) { throw "android build failed ($LASTEXITCODE)" }
+  } finally {
+    Remove-Item Env:GBARECOMP_VERSION_NAME, Env:GBARECOMP_VERSION_CODE -ErrorAction SilentlyContinue
+  }
+  $built = Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk'
+  if (-not (Test-Path $built)) { throw "release APK missing: $built" }
+  $apk = Join-Path $out "EmeraldRecomp-android-arm64-v$Version.apk"
+  Copy-Item -LiteralPath $built -Destination $apk -Force
+
+  # BYOR: list the APK and reject any ROM / BIOS / save.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zipApk = [IO.Compression.ZipFile]::OpenRead($apk)
+  try {
+    $bad = @($zipApk.Entries | Where-Object {
+      $n = $_.Name.ToLowerInvariant()
+      $n -match '\.(gba|agb|sav)$' -or $n -eq 'gba_bios.bin' -or $_.FullName -like 'assets/payload/roms/*' -or
+      $_.FullName -like 'assets/payload/bios/*' -or ($_.Length -eq 16384 -and $n.EndsWith('.bin'))
+    })
+    if ($bad.Count) { throw "private assets in the APK: $(($bad | ForEach-Object FullName) -join ', ')" }
+    $abis = @($zipApk.Entries | Where-Object { $_.FullName -like 'lib/*/libmain.so' } | ForEach-Object { $_.FullName.Split('/')[1] })
+    if (($abis -join ',') -ne 'arm64-v8a') { throw "unexpected APK ABIs: $($abis -join ',')" }
+  } finally { $zipApk.Dispose() }
+
+  $buildTools = Get-ChildItem 'C:\Android\Sdk\build-tools' -Directory | Sort-Object { [version]$_.Name } | Select-Object -Last 1
+  $badging = (Invoke-Captured -File (Join-Path $buildTools.FullName 'aapt2.exe') -Arguments @('dump', 'badging', $apk)).Output
+  if ($badging -notmatch "versionName='$([regex]::Escape($Version))'") { throw "APK versionName is not $Version" }
+  $signer = Invoke-Captured -File 'cmd.exe' -Arguments @('/c', (Join-Path $buildTools.FullName 'apksigner.bat'), 'verify', '--print-certs', $apk)
+  if ($signer.ExitCode -ne 0) { $signer.Output; throw 'apksigner verification failed' }
+  if ($signer.Output -match 'CN=Android Debug') {
+    Write-Warning 'The Android APK is signed with the local DEBUG key. Set GBARECOMP_KEYSTORE / _PASSWORD / GBARECOMP_KEY_ALIAS for a release key before publishing.'
+  }
+  $artifacts.Add($apk)
+  Write-Host "android: $apk"
+}
+
+# ── Checksums ──────────────────────────────────────────────────────────────
+$sums = foreach ($a in $artifacts) {
+  "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $a).Hash.ToLowerInvariant(), (Split-Path -Leaf $a)
+}
+[IO.File]::WriteAllLines((Join-Path $out 'SHA256SUMS.txt'), [string[]]$sums)
+Write-Host "--- release-stage (v$Version) ---"
+$artifacts | ForEach-Object { Get-Item $_ | Select-Object Name, Length } | Format-Table | Out-Host
