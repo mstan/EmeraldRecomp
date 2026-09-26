@@ -52,14 +52,19 @@ target_link_libraries(emerald_view_capture_check PRIVATE gbarecomp_gba)
 #                  <crc32>)
 function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32)
     set(VARIANT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/variants/${NAME}")
-    if(EXISTS "${VARIANT_DIR}/generated/recompiled.cpp")
+    set(GBA_GAME_GENERATED_ROOT "" CACHE PATH "Optional independently generated native corpus for qualification")
+    set(VARIANT_GENERATED_DIR "${VARIANT_DIR}/generated")
+    if(GBA_GAME_GENERATED_ROOT)
+        set(VARIANT_GENERATED_DIR "${GBA_GAME_GENERATED_ROOT}")
+    endif()
+    if(EXISTS "${VARIANT_GENERATED_DIR}/recompiled.cpp")
         message(FATAL_ERROR
             "${NAME}: stale monolithic generated/recompiled.cpp found. "
             "Regenerate with the current gba_recompile before building.")
     endif()
     file(GLOB VARIANT_GENERATED CONFIGURE_DEPENDS
-        "${VARIANT_DIR}/generated/*.c"
-        "${VARIANT_DIR}/generated/*.cpp")
+        "${VARIANT_GENERATED_DIR}/*.c"
+        "${VARIANT_GENERATED_DIR}/*.cpp")
 
     set(VARIANT_GAME_SOURCES src/main.cpp)
     if(GBARECOMP_ENABLE_MODS)
@@ -120,6 +125,11 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         GBARECOMP_BUILTIN_SHA1="${ROM_SHA1}"
         GBARECOMP_BUILTIN_CRC32=${ROM_CRC32}
         GBARECOMP_BUILTIN_REGION="USA")
+    if(GBARECOMP_NETPLAY)
+        target_link_libraries(${TARGET} PRIVATE gbarecomp_netplay)
+        gbarecomp_target_netplay_identity(${TARGET} "${CMAKE_CURRENT_SOURCE_DIR}" "${VARIANT_GENERATED_DIR}")
+        set_property(SOURCE src/main.cpp APPEND PROPERTY COMPILE_DEFINITIONS GBAGAME_NETPLAY=1)
+    endif()
 
     if(GBAGAME_RECOMP_UI)
         target_link_libraries(${TARGET} PRIVATE game_launcher_ui)
@@ -169,6 +179,9 @@ if(GBAGAME_RECOMP_UI)
             GBARECOMP_ENABLE_MODS=1)
     endif()
     recomp_target_launcher_ui(game_launcher_ui CONSOLE gba)
+    if(GBARECOMP_NETPLAY)
+        gbarecomp_target_netplay_launcher(game_launcher_ui)
+    endif()
     set_target_properties(game_launcher_ui PROPERTIES POSITION_INDEPENDENT_CODE ON)
     # Android builds provide SDL2 from the shared shell's SDL subproject.
     if(NOT TARGET SDL2::SDL2)

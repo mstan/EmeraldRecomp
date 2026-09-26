@@ -27,6 +27,11 @@
 #include "mobile_platform.h"
 #include "emerald_extended_view.h"
 #include "touch/emerald_touch.h"
+#if defined(GBAGAME_NETPLAY)
+#include "multiplayer_launch.h"
+#include "gba_netplay_build_identity.h"
+#include "emerald_multiplayer.h"
+#endif
 
 #ifndef GBARECOMP_BUILTIN_NAME
 #define GBARECOMP_BUILTIN_NAME "GBA cartridge"
@@ -90,6 +95,12 @@ int emerald_main(int argc, char** argv) {
     // a sibling game.toml. The asset picker still validates against these
     // values; CLI / TOML can override.
     gbarecomp::RunOptions opts;
+#if defined(GBAGAME_NETPLAY)
+    opts.netplay=gbarecomp::make_gba_netplay_launch("emerald-usa",GBARECOMP_NETPLAY_BUILD_ID,
+        "a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af",emerald::setup_link_instance);
+    try { gbarecomp::parse_gba_netplay_arguments(args,*opts.netplay); }
+    catch (const std::exception& e) { std::fprintf(stderr,"netplay: %s\n",e.what()); return 1; }
+#endif
     opts.builtin_game_name = GBARECOMP_BUILTIN_NAME;
     opts.builtin_rom_sha1  = (sizeof(GBARECOMP_BUILTIN_SHA1) > 1)
                                  ? GBARECOMP_BUILTIN_SHA1
