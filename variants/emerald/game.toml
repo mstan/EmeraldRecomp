@@ -76,8 +76,9 @@ thumb = []
 # 2026-09-23: after a bridged save the 0x30 live bytes at 0x03007C74 equal
 # ROM 0x082E1B70..0x082E1BA0 exactly (tools/touch_scenarios.py --bridge
 # save_prompt_tap_outside), and that was the only dispatch miss (x14, one per
-# sector). Boot (flash ID, save load) is already fully static. Another call
-# depth would surface as a loud miss at a different stack address. Same
+# sector). Boot (flash ID, save load) is already fully static. Other call
+# depths are now covered by the byte-validated native dispatch in
+# src/emerald_ram_dispatch.h, also installed per multiplayer instance. Same
 # helper class as FRLG's ReadFlash1_stack and beads-mc7.4 (Ruby/Sapphire).
 [[code_copy]]
 runtime_start = 0x03007C74
