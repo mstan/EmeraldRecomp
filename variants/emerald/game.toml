@@ -92,6 +92,25 @@ mode = "thumb"
 name = "VerifyFlashSector_Core_stack"
 note = "THUMB entry of the VerifyFlashSector_Core stack copy above"
 
+# STWI_init_all copies the serial IRQ handler into RfuIntrStruct.block1.
+# This code executes even with a cable attached: AgbRFU_checkID probes for an
+# adapter during startup and receives normal-serial completion interrupts.
+# Linked native boot observed PC 03004664; its live bytes match IntrSIO32 at
+# 082E3554. The 0x960 extent is sizeof(block1), including its literal pools.
+# This supplies guest code coverage, not a Wireless Adapter implementation.
+[[code_copy]]
+runtime_start = 0x03004664
+source_start = 0x082E3554
+size = 0x960
+name = "IntrSIO32_RfuIntrStruct_block1"
+note = "STWI_init_all DMA copy into gRfuAPIBuffer; beads-5ae.3.19"
+
+[[extra_func]]
+addr = 0x03004664
+mode = "arm"
+name = "IntrSIO32_ram_entry"
+note = "native serial IRQ entry during adapter detection and communication"
+
 # ── Touch input probes (src/touch/emerald_scene.cpp) ─────────────────────
 # Observe-only entry guards: the registered callbacks always decline, so the
 # original guest bodies run unchanged. They report which menu-input routine
