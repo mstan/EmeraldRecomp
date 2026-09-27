@@ -76,6 +76,33 @@ The runtime **refuses to launch on an unrecognized ROM** — the SHA-1 must matc
 4. Play. Early on you may briefly see the interpreter warm up new code paths; once
    warmed (and cached), they run native.
 
+## Multiplayer: Link Cable and Wireless Adapter
+
+EmeraldRecomp supports **two-player Emerald ↔ Emerald netplay** with a virtual
+**Link Cable** or **Wireless Adapter**. Each peer simulates both GBAs and the
+local link hardware; `recomp-net` exchanges controller inputs using delay-sync
+or rollback. LAN / Direct IP and Internet lobbies use the same simulation.
+
+1. Use matching builds and the supported Emerald USA ROM on both machines.
+2. Open **Netplay**, create or join a lobby, and use a separate trainer save
+   for each player.
+3. The host selects **Lobby Settings → Connection type**: **Link Cable**
+   (default) or **Wireless Adapter**. All players inherit the host's choice.
+4. Start the session, then use the corresponding upstairs Pokémon Center
+   desk. Wireless Adapter enables the **Union Room**; the original game's
+   progression and party requirements still apply.
+
+Cable multiplayer has been play-tested. Wireless currently has validated Union
+Room entry, mutual discovery and contact, deterministic replay, and input
+netplay under simulated latency/jitter. Full wireless trades/battles and all
+RFU recovery behavior have not yet been qualified. See the engine's
+[wireless validation and limits](https://github.com/mstan/gbarecomp/blob/main/docs/WIRELESS.md).
+
+Wireless is available in current source builds; the previously published
+**v0.1.0** binaries contain cable support. Merging source does not replace those
+release downloads. FireRed/LeafGreen/Ruby/Sapphire cross-version linking,
+larger lobbies and Single-Pak multiboot are future work.
+
 ## Controls
 
 | GBA button | Keyboard      |
