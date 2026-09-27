@@ -99,7 +99,7 @@ RFU recovery behavior have not yet been qualified. See the engine's
 [wireless validation and limits](https://github.com/mstan/gbarecomp/blob/main/docs/WIRELESS.md).
 
 Wireless is available in current source builds; the previously published
-**v0.1.0** binaries contain cable support. Merging source does not replace those
+**v0.1.0 and later** binaries contain cable support. Merging source does not replace those
 release downloads. FireRed/LeafGreen/Ruby/Sapphire cross-version linking,
 larger lobbies and Single-Pak multiboot are future work.
 
