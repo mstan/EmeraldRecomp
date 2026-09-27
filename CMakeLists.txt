@@ -19,6 +19,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(GBARECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/gbarecomp"
     CACHE PATH "Path to the gbarecomp platform-core checkout")
+if(ANDROID)
+    set(_netplay_default OFF)
+else()
+    set(_netplay_default ON)
+endif()
+option(GBARECOMP_NETPLAY "Build desktop link-cable netplay" ${_netplay_default})
 set(RECOMP_UI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/recomp-ui"
     CACHE PATH "Path to the shared recomp-ui checkout")
 set(GBARECOMP_RUNTIME_UI_ROOT "${RECOMP_UI_ROOT}"
@@ -202,6 +208,9 @@ else()
 endif()
 add_gba_variant(${EMERALD_TARGET} emerald 19892 "EmeraldRecomp"
     "Pokemon Emerald (USA)" "f3ae088181bf583e55daf962a92bb46f4f1d07b7" 0x1F1C08FB)
+if(GBARECOMP_NETPLAY AND NOT ANDROID)
+    gbarecomp_target_netplay_view_probe(${EMERALD_TARGET} tests/netplay_view_probe.cpp)
+endif()
 
 # Ship the game-owned, disabled-by-default mod catalog beside the executable.
 # (Android packages the catalog into the app payload instead.)
