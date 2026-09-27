@@ -98,8 +98,8 @@ netplay under simulated latency/jitter. Full wireless trades/battles and all
 RFU recovery behavior have not yet been qualified. See the engine's
 [wireless validation and limits](https://github.com/mstan/gbarecomp/blob/main/docs/WIRELESS.md).
 
-Wireless is available in current source builds; the previously published
-**v0.1.0** binaries contain cable support. Merging source does not replace those
+**v0.1.1** binaries include experimental Wireless Adapter Union Room support;
+**v0.1.0** contains cable support only. Merging source does not replace old
 release downloads. FireRed/LeafGreen/Ruby/Sapphire cross-version linking,
 larger lobbies and Single-Pak multiboot are future work.
 
