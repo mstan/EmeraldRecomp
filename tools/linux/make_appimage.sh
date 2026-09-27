@@ -40,7 +40,7 @@ EXCLUDES=(--exclude '.git' --exclude 'build/' --exclude 'build-*/' --exclude 're
           --exclude 'recomp_cache/' --exclude '*.gba' --exclude '*.sav' --exclude '*.state*'
           --exclude 'gba_bios.bin' --exclude 'android/app/build/' --exclude 'android/build/'
           --exclude 'android/.gradle/' --exclude 'android/app/.cxx/')
-rsync -a --delete "${EXCLUDES[@]}" --exclude 'third_party/pokeemerald/' --exclude 'docs/screenshots/' \
+rsync -a --delete "${EXCLUDES[@]}" --exclude '/gbarecomp/' --exclude '/recomp-ui/' --exclude 'third_party/pokeemerald/' --exclude 'docs/screenshots/' \
     "$GAME/" "$STAGE/game/"
 rsync -a --delete "${EXCLUDES[@]}" --exclude 'tools/gbaref/' --exclude 'oracle/' "$ENGINE/" "$STAGE/engine/"
 rsync -a --delete "${EXCLUDES[@]}" "$UI/" "$STAGE/ui/"

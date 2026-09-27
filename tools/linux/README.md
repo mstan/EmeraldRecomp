@@ -6,7 +6,7 @@ the real GBA BIOS is recompiled and executed.
 
 ## You supply the ROM and BIOS
 
-Nothing copyrighted ships in this AppImage. On first run the launcher asks for:
+The game ROM and GBA BIOS are not included. On first run the launcher asks for:
 
 - your legally-obtained **Pokémon Emerald (USA)** ROM (`.gba`), SHA-1
   `f3ae088181bf583e55daf962a92bb46f4f1d07b7`
