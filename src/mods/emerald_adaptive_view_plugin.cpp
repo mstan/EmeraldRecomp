@@ -94,13 +94,18 @@ void install_extended_view(std::uint32_t, std::uint32_t) {
     gba::g_ws_pillarbox = 1;
 }
 
+void install_netplay_view(std::uint32_t left, std::uint32_t right) {
+    enabled = true;
+    install_extended_view(left, right);
+}
+
 void update_extended_view(const gbarecomp::ExtendedViewFrameInfo* frame) {
     if (!enabled || !frame) return;
     auto* bus = gbarecomp::active_bus();
     if (!bus) return;
-    if (last_state_epoch != g_runtime_state_epoch) {
+    if (last_state_epoch != frame->state_epoch) {
         objects = ObjectView{};
-        last_state_epoch = g_runtime_state_epoch;
+        last_state_epoch = frame->state_epoch;
     }
     const ViewMemory memory{bus->ewram_ptr(), bus->iwram_ptr(), bus->rom_ptr(),
                            bus->rom_size(), bus->vram_ptr(), frame->io,

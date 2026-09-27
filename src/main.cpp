@@ -23,12 +23,15 @@
 
 #include "runtime.h"
 #include "runtime_arm.h"
+#include "emerald_ram_dispatch.h"
 #include "mobile_platform.h"
 #include "emerald_extended_view.h"
 #include "touch/emerald_touch.h"
-
-extern "C" void gf_ReadFlash1(void);
-extern "C" void gf_ReadFlash_Core(void);
+#if defined(GBAGAME_NETPLAY)
+#include "multiplayer_launch.h"
+#include "gba_netplay_build_identity.h"
+#include "emerald_multiplayer.h"
+#endif
 
 #ifndef GBARECOMP_BUILTIN_NAME
 #define GBARECOMP_BUILTIN_NAME "GBA cartridge"
@@ -54,38 +57,6 @@ extern "C" void gf_ReadFlash_Core(void);
 #endif
 
 namespace {
-
-bool ram_matches_rom(uint32_t ram_pc, uint32_t rom_pc, uint32_t size) {
-    for (uint32_t offset = 0; offset < size; ++offset) {
-        if (bus_read_u8(ram_pc + offset) != bus_read_u8(rom_pc + offset)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Emerald copies two position-independent flash routines from ROM to moving
-// stack slots. Fixed RAM dispatch aliases would be unsafe because those slots
-// are reused. Canonicalize only byte-for-byte matches against the hash-gated
-// ROM routines; ReadFlash1 additionally has a stable live callback pointer.
-int emerald_ram_dispatch(uint32_t pc, int thumb) {
-    constexpr uint32_t kReadFlash1Rom = 0x082E1A6Cu;
-    constexpr uint32_t kReadFlash1Callback = 0x03007844u;
-    constexpr uint32_t kReadFlashCoreRom = 0x082E1AB0u;
-    constexpr uint32_t kReadFlashCoreSize = 0x22u;
-
-    if (!thumb) return 0;
-    if (bus_read_u32(kReadFlash1Callback) == (pc | 1u) &&
-        ram_matches_rom(pc, kReadFlash1Rom, 4u)) {
-        gf_ReadFlash1();
-        return 1;
-    }
-    if (ram_matches_rom(pc, kReadFlashCoreRom, kReadFlashCoreSize)) {
-        gf_ReadFlash_Core();
-        return 1;
-    }
-    return 0;
-}
 
 void print_usage() {
     std::printf(
@@ -118,12 +89,20 @@ int emerald_main(int argc, char** argv) {
     mobile.program_name = "./EmeraldRecomp";
     const bool on_mobile = gbarecomp::mobile_prepare_process(args, mobile);
 
-    g_runtime_ram_dispatch_hook = &emerald_ram_dispatch;
+    g_runtime_ram_dispatch_hook = &emerald::ram_dispatch;
 
     // Built-in defaults so a standalone <Variant>Recomp.exe ships without
     // a sibling game.toml. The asset picker still validates against these
     // values; CLI / TOML can override.
     gbarecomp::RunOptions opts;
+#if defined(GBAGAME_NETPLAY)
+    opts.netplay=gbarecomp::make_gba_netplay_launch("emerald-usa",GBARECOMP_NETPLAY_BUILD_ID,
+        "a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af",emerald::setup_link_instance);
+    opts.netplay->view_policy = {true, true, emerald::install_netplay_view,
+        emerald::update_extended_view, emerald::reset_extended_view};
+    try { gbarecomp::parse_gba_netplay_arguments(args,*opts.netplay); }
+    catch (const std::exception& e) { std::fprintf(stderr,"netplay: %s\n",e.what()); return 1; }
+#endif
     opts.builtin_game_name = GBARECOMP_BUILTIN_NAME;
     opts.builtin_rom_sha1  = (sizeof(GBARECOMP_BUILTIN_SHA1) > 1)
                                  ? GBARECOMP_BUILTIN_SHA1

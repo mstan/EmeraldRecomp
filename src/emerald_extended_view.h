@@ -59,6 +59,8 @@ private:
 };
 
 void install_extended_view(std::uint32_t left, std::uint32_t right);
+// Trusted render-only activation; does not activate the mod package system.
+void install_netplay_view(std::uint32_t left, std::uint32_t right);
 void update_extended_view(const gbarecomp::ExtendedViewFrameInfo* frame);
 void reset_extended_view();
 // Touch mapping helpers (see emerald_adaptive_view_plugin.cpp).

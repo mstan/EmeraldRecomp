@@ -19,6 +19,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(GBARECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/gbarecomp"
     CACHE PATH "Path to the gbarecomp platform-core checkout")
+if(ANDROID)
+    set(_netplay_default OFF)
+else()
+    set(_netplay_default ON)
+endif()
+option(GBARECOMP_NETPLAY "Build desktop link-cable netplay" ${_netplay_default})
 set(RECOMP_UI_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/recomp-ui"
     CACHE PATH "Path to the shared recomp-ui checkout")
 set(GBARECOMP_RUNTIME_UI_ROOT "${RECOMP_UI_ROOT}"
@@ -52,14 +58,19 @@ target_link_libraries(emerald_view_capture_check PRIVATE gbarecomp_gba)
 #                  <crc32>)
 function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32)
     set(VARIANT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/variants/${NAME}")
-    if(EXISTS "${VARIANT_DIR}/generated/recompiled.cpp")
+    set(GBA_GAME_GENERATED_ROOT "" CACHE PATH "Optional independently generated native corpus for qualification")
+    set(VARIANT_GENERATED_DIR "${VARIANT_DIR}/generated")
+    if(GBA_GAME_GENERATED_ROOT)
+        set(VARIANT_GENERATED_DIR "${GBA_GAME_GENERATED_ROOT}")
+    endif()
+    if(EXISTS "${VARIANT_GENERATED_DIR}/recompiled.cpp")
         message(FATAL_ERROR
             "${NAME}: stale monolithic generated/recompiled.cpp found. "
             "Regenerate with the current gba_recompile before building.")
     endif()
     file(GLOB VARIANT_GENERATED CONFIGURE_DEPENDS
-        "${VARIANT_DIR}/generated/*.c"
-        "${VARIANT_DIR}/generated/*.cpp")
+        "${VARIANT_GENERATED_DIR}/*.c"
+        "${VARIANT_GENERATED_DIR}/*.cpp")
 
     set(VARIANT_GAME_SOURCES src/main.cpp)
     if(GBARECOMP_ENABLE_MODS)
@@ -120,6 +131,11 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         GBARECOMP_BUILTIN_SHA1="${ROM_SHA1}"
         GBARECOMP_BUILTIN_CRC32=${ROM_CRC32}
         GBARECOMP_BUILTIN_REGION="USA")
+    if(GBARECOMP_NETPLAY)
+        target_link_libraries(${TARGET} PRIVATE gbarecomp_netplay)
+        gbarecomp_target_netplay_identity(${TARGET} "${CMAKE_CURRENT_SOURCE_DIR}" "${VARIANT_GENERATED_DIR}")
+        set_property(SOURCE src/main.cpp APPEND PROPERTY COMPILE_DEFINITIONS GBAGAME_NETPLAY=1)
+    endif()
 
     if(GBAGAME_RECOMP_UI)
         target_link_libraries(${TARGET} PRIVATE game_launcher_ui)
@@ -169,6 +185,9 @@ if(GBAGAME_RECOMP_UI)
             GBARECOMP_ENABLE_MODS=1)
     endif()
     recomp_target_launcher_ui(game_launcher_ui CONSOLE gba)
+    if(GBARECOMP_NETPLAY)
+        gbarecomp_target_netplay_launcher(game_launcher_ui)
+    endif()
     set_target_properties(game_launcher_ui PROPERTIES POSITION_INDEPENDENT_CODE ON)
     # Android builds provide SDL2 from the shared shell's SDL subproject.
     if(NOT TARGET SDL2::SDL2)
@@ -189,6 +208,9 @@ else()
 endif()
 add_gba_variant(${EMERALD_TARGET} emerald 19892 "EmeraldRecomp"
     "Pokemon Emerald (USA)" "f3ae088181bf583e55daf962a92bb46f4f1d07b7" 0x1F1C08FB)
+if(GBARECOMP_NETPLAY AND NOT ANDROID)
+    gbarecomp_target_netplay_view_probe(${EMERALD_TARGET} tests/netplay_view_probe.cpp)
+endif()
 
 # Ship the game-owned, disabled-by-default mod catalog beside the executable.
 # (Android packages the catalog into the app payload instead.)
