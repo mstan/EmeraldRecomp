@@ -98,6 +98,8 @@ int emerald_main(int argc, char** argv) {
 #if defined(GBAGAME_NETPLAY)
     opts.netplay=gbarecomp::make_gba_netplay_launch("emerald-usa",GBARECOMP_NETPLAY_BUILD_ID,
         "a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af",emerald::setup_link_instance);
+    opts.netplay->supported_media=(1u<<static_cast<unsigned>(gbarecomp::GbaLinkMedium::Cable))|
+        (1u<<static_cast<unsigned>(gbarecomp::GbaLinkMedium::Wireless));
     opts.netplay->view_policy = {true, true, emerald::install_netplay_view,
         emerald::update_extended_view, emerald::reset_extended_view};
     try { gbarecomp::parse_gba_netplay_arguments(args,*opts.netplay); }

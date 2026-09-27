@@ -4,6 +4,7 @@
 extern "C" void gf_ReadFlash1(void);
 extern "C" void gf_ReadFlash_Core(void);
 extern "C" void gf_VerifyFlashSector_Core(void);
+extern "C" void gf_rfu_STC_fastCopy(void);
 
 namespace emerald {
 inline bool ram_matches_rom(uint32_t ram_pc, uint32_t rom_pc, uint32_t size) {
@@ -21,6 +22,12 @@ inline int ram_dispatch(uint32_t pc, int thumb) {
     // routine to their own stack buffer before comparing programmed bytes.
     constexpr uint32_t verify_core=0x082E1B70, verify_size=0x30;
     if (!thumb) return 0;
+    // rfu_initializeAPI copies this position-independent payload helper into
+    // gRfuFixed->fastCopyBuffer. Validate the live RAM before using its ROM
+    // translation, just as for the copied flash callbacks below.
+    if (pc==0x03004274 && ram_matches_rom(pc,0x082E53F4,0x30)) {
+        gf_rfu_STC_fastCopy(); return 1;
+    }
     if (bus_read_u32(callback)==(pc|1u) && ram_matches_rom(pc,read_flash1,4)) {
         gf_ReadFlash1(); return 1;
     }
