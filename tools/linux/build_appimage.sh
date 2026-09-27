@@ -27,7 +27,7 @@ ninja -C /build/sdl -j "$JOBS" install > /build/sdl-build.log 2>&1 || { tail -40
 
 echo "== EmeraldRecomp"
 cmake -S "$GAME" -B /build/emerald -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG" -DCMAKE_PREFIX_PATH=/build/sdl-install \
+    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG" -DGBARECOMP_NETPLAY=ON -DCMAKE_PREFIX_PATH=/build/sdl-install \
     -DGBARECOMP_ROOT="$ENGINE" -DRECOMP_UI_ROOT="$UI" -DGBARECOMP_RUNTIME_UI_ROOT="$UI" \
     -DGBARECOMP_BUILD_ORACLE=OFF > /build/emerald-configure.log 2>&1 \
     || { tail -40 /build/emerald-configure.log; exit 1; }
@@ -46,7 +46,9 @@ cp -R /build/emerald/assets "$APPDIR/usr/bin/assets"
 # Checked-in catalog only (never a build dir's remembered selections).
 cp -R "$GAME/mods/preloaded/packages" "$APPDIR/usr/share/emeraldrecomp/mods/packages"
 cp "$GAME/LICENSE" "$APPDIR/usr/share/emeraldrecomp/LICENSE"
+python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses"
 cp "$GAME/tools/linux/README.md" "$APPDIR/usr/share/emeraldrecomp/README.md"
+cat "$GAME/docs/NETPLAY.md" >> "$APPDIR/usr/share/emeraldrecomp/README.md"
 sed -i "s/@VERSION@/${VERSION}/g" "$APPDIR/usr/share/emeraldrecomp/README.md"
 install -m 755 "$GAME/tools/linux/AppRun" "$APPDIR/AppRun"
 cp "$GAME/tools/linux/emeraldrecomp.desktop" "$APPDIR/emeraldrecomp.desktop"
@@ -108,10 +110,11 @@ chmod +x "$OUT/$NAME.AppImage"
 echo "== smoke test (the packaged AppImage, headless)"
 if [[ -f /private/gba_bios.bin && -f /private/emerald_usa.gba ]]; then
     SMOKE=$(mktemp -d)
+    trap 'rm -rf "$SMOKE"' EXIT
     ( cd "$SMOKE" && EMERALDRECOMP_HOME="$SMOKE/home" APPIMAGE_EXTRACT_AND_RUN=1 \
         timeout 600 "$OUT/$NAME.AppImage" --no-launcher --no-window --frames 1500 \
         --bios /private/gba_bios.bin --rom /private/emerald_usa.gba \
-        --save-path "$SMOKE/home/smoke.sav" > "$SMOKE/run.log" 2>&1 ) || true
+        --save-path "$SMOKE/home/smoke.sav" > "$SMOKE/run.log" 2>&1 ) || { tail -40 "$SMOKE/run.log"; exit 1; }
     grep -E "cpu_backend|self_heal_coverage" "$SMOKE/run.log" || true
     grep -q "self_heal_coverage=FULLY_STATIC" "$SMOKE/run.log" \
         || { tail -40 "$SMOKE/run.log"; echo "smoke test FAILED"; exit 1; }

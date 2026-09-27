@@ -51,8 +51,8 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be X.Y.Z (got '$
 $MingwBin = 'C:\msys64\mingw64\bin'
 $env:PATH = "$MingwBin;$env:PATH"
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $EngineRoot) { $EngineRoot = Join-Path $root '..\gbarecomp' }
-if (-not $RecompUiRoot) { $RecompUiRoot = Join-Path $root '..\recomp-ui' }
+if (-not $EngineRoot) { $EngineRoot = Join-Path $root 'gbarecomp' }
+if (-not $RecompUiRoot) { $RecompUiRoot = Join-Path $root 'recomp-ui' }
 if (-not $Rom) { $Rom = Join-Path $root 'variants\emerald\roms\emerald_usa.gba' }
 $EngineRoot = (Resolve-Path -LiteralPath $EngineRoot).Path
 $RecompUiRoot = (Resolve-Path -LiteralPath $RecompUiRoot).Path
@@ -65,8 +65,9 @@ $artifacts = [System.Collections.Generic.List[string]]::new()
 
 function Invoke-Native {
   param([string]$File, [string[]]$Arguments, [string]$What)
-  & $File @Arguments
-  if ($LASTEXITCODE -ne 0) { throw "$What failed ($LASTEXITCODE)" }
+  $result = Invoke-Captured -File $File -Arguments $Arguments
+  Write-Host $result.Output
+  if ($result.ExitCode -ne 0) { throw "$What failed ($($result.ExitCode))" }
 }
 
 # Run a native tool, capturing stdout+stderr (PowerShell 5.1 turns redirected
@@ -78,7 +79,7 @@ function Invoke-Captured {
   try {
     $quoted = $Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ } }
     $p = Start-Process -FilePath $File -ArgumentList $quoted -WorkingDirectory $WorkingDirectory `
-        -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $null = $p.Handle   # .NET only records ExitCode once the handle is held
     $p.PriorityClass = 'BelowNormal'
     $p.WaitForExit()
@@ -115,6 +116,14 @@ function Assert-NoPrivateAssets {
     [Text.Encoding]::ASCII.GetString($h, 0xA0, 16) -eq 'POKEMON EMERBPEE'
   })
   if ($bad.Count) { throw "private assets in ${Dir}:`n$(($bad | ForEach-Object FullName) -join "`n")" }
+}
+
+function Assert-ChildPath([string]$Path, [string]$Parent) {
+  $targetPath = [IO.Path]::GetFullPath($Path)
+  $parentPath = [IO.Path]::GetFullPath($Parent).TrimEnd('\') + '\'
+  if (-not $targetPath.StartsWith($parentPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing filesystem operation outside ${parentPath}: $targetPath"
+  }
 }
 
 function Get-WslPath([string]$Path) {
@@ -156,14 +165,14 @@ if ($Platforms -contains 'windows') {
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
       "-DCMAKE_C_COMPILER=$MingwBin/cc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/c++.exe",
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
-      '-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF',
+      '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
       "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
       "-DGBARECOMP_RUNTIME_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
       '-DGBARECOMP_MINGW_PREFIX_UNIX=/c/msys64/mingw64',
       '-DSDL2_INCLUDE_DIR=C:/msys64/mingw64/include/SDL2',
       '-DSDL2_LIBRARY=C:/msys64/mingw64/lib/libSDL2.dll.a') 'windows configure'
-  $p = Start-Process -FilePath "$MingwBin\cmake.exe" -NoNewWindow -PassThru `
+  $p = Start-Process -FilePath "$MingwBin\cmake.exe" -WindowStyle Hidden -PassThru `
       -ArgumentList @('--build', "`"$build`"", '--target', 'EmeraldRecomp', '-j', $Jobs)
   $null = $p.Handle
   $p.PriorityClass = 'BelowNormal'
@@ -174,6 +183,7 @@ if ($Platforms -contains 'windows') {
   & "$MingwBin\strip.exe" $exe
   $stageName = "EmeraldRecomp-windows-x64-v$Version"
   $stage = Join-Path $out $stageName
+  Assert-ChildPath $stage $out
   if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item $exe $stage
@@ -186,8 +196,12 @@ if ($Platforms -contains 'windows') {
   # Checked-in mod catalog only, never a build dir's remembered selections.
   Copy-Item -LiteralPath (Join-Path $root 'mods\preloaded') -Destination (Join-Path $stage 'mods') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
+  Invoke-Native (Get-Command python.exe).Source @((Join-Path $root 'tools\collect_licenses.py'),
+      $EngineRoot, $RecompUiRoot, (Join-Path $stage 'licenses'), '--mingw', (Split-Path $MingwBin)) 'dependency notices'
   # Self-contained tcc overlay toolchain so toolchain-less players self-heal
   # overlay gaps (see gbarecomp/tools/fetch_tcc.ps1).
+  Assert-ChildPath (Join-Path $EngineRoot 'tools\_toolchain_cache\tcc_extract') $EngineRoot
+  Assert-ChildPath (Join-Path $stage 'overlay_toolchain\tcc') $stage
   & (Join-Path $EngineRoot 'tools\fetch_tcc.ps1') -Toolchain (Join-Path $stage 'overlay_toolchain') -EngineRoot $EngineRoot
 
   @"
@@ -225,11 +239,13 @@ the Start menu stays in reach at the right edge. Battles retain their native
 See the GitHub release notes for what changed in v$Version.
 "@ | Out-File (Join-Path $stage 'README.md') -Encoding utf8
 
+  Get-Content -LiteralPath (Join-Path $root 'docs\NETPLAY.md') | Add-Content -LiteralPath (Join-Path $stage 'README.md') -Encoding utf8
   Assert-NoPrivateAssets $stage
 
   # Headless smoke run from a scratch copy (the stage must stay pristine: a
   # run writes rom.cfg / bios.cfg / coverage files next to the exe).
   $smoke = Join-Path $env:TEMP "emeraldrecomp-smoke-$Version"
+  Assert-ChildPath $smoke $env:TEMP
   if (Test-Path $smoke) { Remove-Item $smoke -Recurse -Force }
   Copy-Item $stage $smoke -Recurse
   try {
@@ -237,7 +253,7 @@ See the GitHub release notes for what changed in v$Version.
     $run = Invoke-Captured -File (Join-Path $smoke 'EmeraldRecomp.exe') -WorkingDirectory $smoke `
         -Arguments @('--no-launcher', '--no-window', '--frames', '1500', '--bios', $Bios, '--rom', $Rom,
                      '--save-path', (Join-Path $smoke 'smoke.sav'))
-    if ($run.Output -notmatch 'self_heal_coverage=FULLY_STATIC') { $run.Output; throw 'windows smoke test is not FULLY_STATIC' }
+    if ($run.ExitCode -ne 0 -or $run.Output -notmatch 'self_heal_coverage=FULLY_STATIC') { $run.Output; throw 'windows smoke test is not FULLY_STATIC' }
     Write-Host 'windows smoke: FULLY_STATIC'
   } finally {
     $env:GBARECOMP_STRICT_STATIC = $null
@@ -276,12 +292,13 @@ if ($Platforms -contains 'linux') {
   # Private assets for the container smoke test: a scratch copy, mounted
   # read-only, deleted afterwards. They never enter the image.
   $private = Join-Path $env:TEMP "emeraldrecomp-private-$([guid]::NewGuid().ToString('N'))"
+  Assert-ChildPath $private $env:TEMP
   New-Item -ItemType Directory $private | Out-Null
   try {
     Copy-Item -LiteralPath $Bios (Join-Path $private 'gba_bios.bin')
     Copy-Item -LiteralPath $Rom (Join-Path $private 'emerald_usa.gba')
     $env:MSYS_NO_PATHCONV = '1'
-    Invoke-Native 'wsl' @('-e', 'bash', (Get-WslPath (Join-Path $root 'tools\linux\make_appimage.sh')),
+    Invoke-Native "$env:SystemRoot\System32\wsl.exe" @('-e', 'bash', (Get-WslPath (Join-Path $root 'tools\linux\make_appimage.sh')),
         '--version', $Version, '--game', (Get-WslPath $root), '--engine', (Get-WslPath $EngineRoot),
         '--ui', (Get-WslPath $RecompUiRoot), '--out', (Get-WslPath $out),
         '--private', (Get-WslPath $private), '--jobs', "$Jobs") 'linux AppImage build'
