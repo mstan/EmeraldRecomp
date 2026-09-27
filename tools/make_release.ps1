@@ -65,8 +65,9 @@ $artifacts = [System.Collections.Generic.List[string]]::new()
 
 function Invoke-Native {
   param([string]$File, [string[]]$Arguments, [string]$What)
-  & $File @Arguments
-  if ($LASTEXITCODE -ne 0) { throw "$What failed ($LASTEXITCODE)" }
+  $result = Invoke-Captured -File $File -Arguments $Arguments
+  Write-Host $result.Output
+  if ($result.ExitCode -ne 0) { throw "$What failed ($($result.ExitCode))" }
 }
 
 # Run a native tool, capturing stdout+stderr (PowerShell 5.1 turns redirected
