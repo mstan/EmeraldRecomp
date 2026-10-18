@@ -221,8 +221,10 @@ int main() {
         emerald::UiView ui;
         ui.prepare(portrait.memory(), field, 240, 427);
         int sx = 0, sy = 0;
-        require(ui.sample(0, 176, -125, &sx, &sy) == 1 && sx == 176 && sy == 8, "portrait Start menu not top anchored");
-        require(ui.sample(0, 176, 100, &sx, &sy) == -1, "old menu location not suppressed");
+        // The owner-selected portrait layout centres this menu: its interior
+        // centre is y=64, so it moves down 16 native pixels to view centre 80.
+        require(ui.sample(0, 176, 24, &sx, &sy) == 1 && sx == 176 && sy == 8, "portrait Start menu not centred");
+        require(ui.sample(0, 176, 8, &sx, &sy) == -1, "old menu location not suppressed");
         require(field.prepare(portrait.memory(), 569) == ViewStatus::Ready, "wide menu field rejected");
         ui.prepare(portrait.memory(), field, 569, 160);
         require(ui.sample(0, 341, 8, &sx, &sy) == 1 && sx == 176 && sy == 8, "wide Start menu not right anchored");

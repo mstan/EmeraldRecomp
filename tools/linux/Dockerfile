@@ -26,4 +26,5 @@ RUN mkdir -p /opt/appimage && cd /opt/appimage \
     && chmod +x appimagetool-x86_64.AppImage \
     && ./appimagetool-x86_64.AppImage --appimage-extract >/dev/null \
     && mv squashfs-root appimagetool \
+    && chmod -R a+rX /opt/appimage \
     && sha256sum appimagetool-x86_64.AppImage runtime-x86_64 > SHA256SUMS
