@@ -3,12 +3,12 @@
 # build_appimage.sh in it. Runs on Linux or WSL (Docker required).
 #
 #   make_appimage.sh --version X.Y.Z --game DIR --engine DIR --ui DIR --out DIR \
-#                    [--private DIR] [--jobs N]
+#                    [--private DIR] [--jobs N] [--engine-rev REV]
 #
 # --private (optional) holds gba_bios.bin + emerald_usa.gba for the smoke
 # test; it is mounted read-only and never enters the image.
 set -euo pipefail
-VERSION="" GAME="" ENGINE="" UI="" OUT="" PRIVATE="" JOBS=8
+VERSION="" GAME="" ENGINE="" UI="" OUT="" PRIVATE="" JOBS=4 ENGINE_REV=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) VERSION="$2"; shift 2 ;;
@@ -18,6 +18,7 @@ while [[ $# -gt 0 ]]; do
         --out) OUT="$2"; shift 2 ;;
         --private) PRIVATE="$2"; shift 2 ;;
         --jobs) JOBS="$2"; shift 2 ;;
+        --engine-rev) ENGINE_REV="$2"; shift 2 ;;
         *) echo "unknown argument $1"; exit 2 ;;
     esac
 done
@@ -54,6 +55,8 @@ if [[ -n "$PRIVATE" ]]; then
     MOUNTS+=(-v "$PRIV_STAGE:/private:ro")
 fi
 # Build as the invoking user so /out stays owned by them.
+[[ -n "$ENGINE_REV" ]] || ENGINE_REV="$(git -C "$ENGINE" rev-parse --short=12 HEAD)"
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e VERSION="$VERSION" -e JOBS="$JOBS" \
+    -e ENGINE_REV="$ENGINE_REV" \
     -v "$CACHE:/build" "${MOUNTS[@]}" "$IMAGE" \
-    bash /src/game/tools/linux/build_appimage.sh
+    nice -n 10 bash /src/game/tools/linux/build_appimage.sh
