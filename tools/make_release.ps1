@@ -42,6 +42,7 @@ param(
   [string]$Rom,
   [string]$Bios,
   [string]$GeneratedBiosDir,
+  [string]$WindowsBuildDir = 'build-release-windows',
   [int]$Jobs = 8,
   [switch]$AllowDirty,
   [switch]$AllowDebugSigning
@@ -146,7 +147,7 @@ if ($romSha -ne 'f3ae088181bf583e55daf962a92bb46f4f1d07b7') { throw "ROM SHA-1 $
 # ── 2. Recompile ───────────────────────────────────────────────────────────
 $toolBuild = Join-Path $root 'build-release-tool'
 Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G', 'Ninja',
-    "-DCMAKE_C_COMPILER=$MingwBin/cc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/c++.exe",
+    "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
     "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
     '-DGBARECOMP_BUILD_ORACLE=OFF') 'engine tool configure'
 Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile') 'gba_recompile build'
@@ -168,10 +169,10 @@ if (-not $GeneratedBiosDir) { $GeneratedBiosDir = Join-Path $EngineRoot 'src\run
     }
   }
 if ($Platforms -contains 'windows') {
-  $build = Join-Path $root 'build-release-windows'
+  $build = if ([IO.Path]::IsPathRooted($WindowsBuildDir)) { [IO.Path]::GetFullPath($WindowsBuildDir) } else { Join-Path $root $WindowsBuildDir }
   # Always (re)state the roots so a reused cache can never point elsewhere.
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
-      "-DCMAKE_C_COMPILER=$MingwBin/cc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/c++.exe",
+      "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
       '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
