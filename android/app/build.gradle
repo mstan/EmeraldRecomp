@@ -15,8 +15,8 @@ def recompUiRoot = pick("recompUiRoot", "RECOMP_UI_ROOT", new File(gameRoot, "re
 
 ext.gbaGame = [
     applicationId : "com.mstan.emeraldrecomp",
-    versionCode   : 8,
-    versionName   : "0.1.2",
+    versionCode   : 103,
+    versionName   : "0.1.3",
     title         : "Pokémon Emerald",
     romLabel      : "Pokémon Emerald (USA) ROM",
     romSha1       : ["f3ae088181bf583e55daf962a92bb46f4f1d07b7"],
@@ -36,6 +36,9 @@ ext.gbaGame = [
     gameRoot      : gameRoot,
     engineRoot    : engineRoot,
     recompUiRoot  : recompUiRoot,
+    cmakeArguments: ["-DGBARECOMP_GENERATED_BIOS_DIR=" +
+        pick("generatedBiosRoot", "GBARECOMP_GENERATED_BIOS_DIR",
+            new File(engineRoot, "src/runtime/generated_bios")).absolutePath.replace('\\', '/')],
 ]
 
 apply from: new File(engineRoot, "platform/android/gbarecomp-app.gradle")

@@ -160,14 +160,14 @@ if ($regen.ExitCode -ne 0) { $regen.Output; throw "gba_recompile failed ($($rege
 [regex]::Matches($regen.Output, '==> discovered .*') | ForEach-Object { Write-Host $_.Value }
 
 # ── 3. Windows ─────────────────────────────────────────────────────────────
-if ($Platforms -contains 'windows') {
-  if (-not $GeneratedBiosDir) { $GeneratedBiosDir = Join-Path $EngineRoot 'src\runtime\generated_bios' }
+if (-not $GeneratedBiosDir) { $GeneratedBiosDir = Join-Path $EngineRoot 'src\runtime\generated_bios' }
   $generatedBiosPath = (Resolve-Path -LiteralPath $GeneratedBiosDir).Path
   foreach ($name in @('bios_recompiled.cpp', 'bios_recompiled.h', 'bios_dispatch_table.cpp', 'bios_symbol_map.cpp')) {
     if (-not (Test-Path -LiteralPath (Join-Path $generatedBiosPath $name) -PathType Leaf)) {
       throw "Required generated BIOS input is missing: $generatedBiosPath\$name"
     }
   }
+if ($Platforms -contains 'windows') {
   $build = Join-Path $root 'build-release-windows'
   # Always (re)state the roots so a reused cache can never point elsewhere.
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
@@ -310,7 +310,7 @@ if ($Platforms -contains 'linux') {
     Invoke-Native "$env:SystemRoot\System32\wsl.exe" @('-e', 'bash', (Get-WslPath (Join-Path $root 'tools\linux\make_appimage.sh')),
         '--version', $Version, '--game', (Get-WslPath $root), '--engine', (Get-WslPath $EngineRoot),
         '--ui', (Get-WslPath $RecompUiRoot), '--out', (Get-WslPath $out),
-        '--private', (Get-WslPath $private), '--jobs', "$Jobs") 'linux AppImage build'
+        '--private', (Get-WslPath $private), '--generated-bios', (Get-WslPath $generatedBiosPath), '--jobs', "$Jobs") 'linux AppImage build'
   } finally { Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue }
   $appimage = Join-Path $out "EmeraldRecomp-linux-x86_64-v$Version.AppImage"
   if (-not (Test-Path $appimage)) { throw "AppImage missing: $appimage" }
@@ -321,6 +321,8 @@ if ($Platforms -contains 'linux') {
 # ── 5. Android ─────────────────────────────────────────────────────────────
 if ($Platforms -contains 'android') {
   $parts = $Version.Split('.') | ForEach-Object { [int]$_ }
+  $previousGeneratedBios = $env:GBARECOMP_GENERATED_BIOS_DIR
+  $env:GBARECOMP_GENERATED_BIOS_DIR = $generatedBiosPath
   $env:GBARECOMP_VERSION_NAME = $Version
   $env:GBARECOMP_VERSION_CODE = "$($parts[0] * 10000 + $parts[1] * 100 + $parts[2])"
   try {
@@ -330,6 +332,7 @@ if ($Platforms -contains 'android') {
         -EngineRoot $EngineRoot -RecompUiRoot $RecompUiRoot -Release -Abis 'arm64-v8a' -Jobs $Jobs
     if ($LASTEXITCODE -ne 0) { throw "android build failed ($LASTEXITCODE)" }
   } finally {
+    $env:GBARECOMP_GENERATED_BIOS_DIR = $previousGeneratedBios
     Remove-Item Env:GBARECOMP_VERSION_NAME, Env:GBARECOMP_VERSION_CODE -ErrorAction SilentlyContinue
   }
   $built = Join-Path $root 'android\app\build\outputs\apk\release\app-release.apk'

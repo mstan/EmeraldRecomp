@@ -29,6 +29,7 @@ echo "== EmeraldRecomp"
 cmake -S "$GAME" -B /build/emerald -G Ninja -DCMAKE_BUILD_TYPE=Release \
     "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG" -DGBARECOMP_NETPLAY=ON -DCMAKE_PREFIX_PATH=/build/sdl-install \
     -DGBARECOMP_ROOT="$ENGINE" -DRECOMP_UI_ROOT="$UI" -DGBARECOMP_RUNTIME_UI_ROOT="$UI" \
+    -DGBARECOMP_GENERATED_BIOS_DIR=/src/bios \
     -DGBARECOMP_BUILD_ORACLE=OFF -DGBARECOMP_ENGINE_REVISION="${ENGINE_REV:?ENGINE_REV is required}" \
     > /build/emerald-configure.log 2>&1 \
     || { tail -40 /build/emerald-configure.log; exit 1; }
