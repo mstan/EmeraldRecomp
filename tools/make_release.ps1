@@ -43,6 +43,7 @@ param(
   [string]$Bios,
   [string]$GeneratedBiosDir,
   [string]$WindowsBuildDir = 'build-release-windows',
+  [string]$EngineToolBuildDir = 'build-release-tool',
   [int]$Jobs = 8,
   [switch]$AllowDirty,
   [switch]$AllowDebugSigning
@@ -145,12 +146,12 @@ $romSha = (Get-FileHash -Algorithm SHA1 -LiteralPath $Rom).Hash.ToLowerInvariant
 if ($romSha -ne 'f3ae088181bf583e55daf962a92bb46f4f1d07b7') { throw "ROM SHA-1 $romSha is not Emerald (USA)" }
 
 # ── 2. Recompile ───────────────────────────────────────────────────────────
-$toolBuild = Join-Path $root 'build-release-tool'
+$toolBuild = if ([IO.Path]::IsPathRooted($EngineToolBuildDir)) { [IO.Path]::GetFullPath($EngineToolBuildDir) } else { Join-Path $root $EngineToolBuildDir }
 Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G', 'Ninja',
     "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
     "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
     '-DGBARECOMP_BUILD_ORACLE=OFF') 'engine tool configure'
-Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile') 'gba_recompile build'
+Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile', '--parallel', "$Jobs") 'gba_recompile build'
 $regen = Invoke-Captured -File (Join-Path $toolBuild 'gba_recompile.exe') -WorkingDirectory (Join-Path $root 'variants\emerald') `
     -Arguments @('--rom', $Rom, '--config', 'game.toml', '--config', 'symbols/BPEE_symbols.toml',
                  '--config', 'symbols/BPEE_reviewed_seeds.toml', '--symbols', 'symbols/imported_symbols.tsv',
