@@ -311,7 +311,8 @@ if ($Platforms -contains 'linux') {
     Invoke-Native "$env:SystemRoot\System32\wsl.exe" @('-e', 'bash', (Get-WslPath (Join-Path $root 'tools\linux\make_appimage.sh')),
         '--version', $Version, '--game', (Get-WslPath $root), '--engine', (Get-WslPath $EngineRoot),
         '--ui', (Get-WslPath $RecompUiRoot), '--out', (Get-WslPath $out),
-        '--private', (Get-WslPath $private), '--generated-bios', (Get-WslPath $generatedBiosPath), '--jobs', "$Jobs") 'linux AppImage build'
+        '--private', (Get-WslPath $private), '--generated-bios', (Get-WslPath $generatedBiosPath),
+        '--engine-rev', ((git -C $EngineRoot rev-parse --short=12 HEAD).Trim()), '--jobs', "$Jobs") 'linux AppImage build'
   } finally { Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue }
   $appimage = Join-Path $out "EmeraldRecomp-linux-x86_64-v$Version.AppImage"
   if (-not (Test-Path $appimage)) { throw "AppImage missing: $appimage" }
