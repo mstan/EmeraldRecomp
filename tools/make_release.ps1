@@ -41,6 +41,7 @@ param(
   [string]$RecompUiRoot,
   [string]$Rom,
   [string]$Bios,
+  [string]$GeneratedBiosDir,
   [int]$Jobs = 8,
   [switch]$AllowDirty,
   [switch]$AllowDebugSigning
@@ -160,6 +161,13 @@ if ($regen.ExitCode -ne 0) { $regen.Output; throw "gba_recompile failed ($($rege
 
 # ── 3. Windows ─────────────────────────────────────────────────────────────
 if ($Platforms -contains 'windows') {
+  if (-not $GeneratedBiosDir) { $GeneratedBiosDir = Join-Path $EngineRoot 'src\runtime\generated_bios' }
+  $generatedBiosPath = (Resolve-Path -LiteralPath $GeneratedBiosDir).Path
+  foreach ($name in @('bios_recompiled.cpp', 'bios_recompiled.h', 'bios_dispatch_table.cpp', 'bios_symbol_map.cpp')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $generatedBiosPath $name) -PathType Leaf)) {
+      throw "Required generated BIOS input is missing: $generatedBiosPath\$name"
+    }
+  }
   $build = Join-Path $root 'build-release-windows'
   # Always (re)state the roots so a reused cache can never point elsewhere.
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
@@ -167,6 +175,7 @@ if ($Platforms -contains 'windows') {
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
       '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
+      "-DGBARECOMP_GENERATED_BIOS_DIR=$($generatedBiosPath.Replace('\', '/'))",
       "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
       "-DGBARECOMP_RUNTIME_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
       '-DGBARECOMP_MINGW_PREFIX_UNIX=/c/msys64/mingw64',
