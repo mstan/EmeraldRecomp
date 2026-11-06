@@ -207,6 +207,7 @@ if ($Platforms -contains 'windows') {
   # Checked-in mod catalog only, never a build dir's remembered selections.
   Copy-Item -LiteralPath (Join-Path $root 'mods\preloaded') -Destination (Join-Path $stage 'mods') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
+  Copy-Item -LiteralPath (Join-Path $root 'PERMISSIONS.md') -Destination $stage
   Invoke-Native (Get-Command python.exe).Source @((Join-Path $root 'tools\collect_licenses.py'),
       $EngineRoot, $RecompUiRoot, (Join-Path $stage 'licenses'), '--mingw', (Split-Path $MingwBin)) 'dependency notices'
   # Self-contained tcc overlay toolchain so toolchain-less players self-heal
