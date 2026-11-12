@@ -217,7 +217,7 @@ if(GBARECOMP_NETPLAY AND NOT ANDROID)
     gbarecomp_target_netplay_view_probe(${EMERALD_TARGET} tests/netplay_view_probe.cpp)
 endif()
 
-# Ship the game-owned, disabled-by-default mod catalog beside the executable.
+# Ship the game-owned mod catalog; fresh profiles enable adaptive widescreen.
 # (Android packages the catalog into the app payload instead.)
 set(EMERALD_PRELOADED_MODS "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded")
 if(NOT ANDROID AND EXISTS "${EMERALD_PRELOADED_MODS}/packages")

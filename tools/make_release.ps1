@@ -241,9 +241,9 @@ The ROM and BIOS are **never** redistributed - supply your own dumps.
 
 ## Widescreen mod
 
-Open **Mods**, enable **Overworld Widescreen (Experimental)**, and choose
-**Fit to window**, **16:9**, **21:9** or **32:9**. Apply the selection and play.
-The feature ships disabled and preserves native gameplay and save data. Fit
+Fresh installations enable **Overworld Widescreen (Experimental)** with
+**Fit to window**. Open **Mods** to disable it or choose **16:9**, **21:9**
+or **32:9**. Existing saved choices and native save data are preserved. Fit
 fills landscape and portrait windows with additional scenery and live NPCs;
 the Start menu stays in reach at the right edge. Battles retain their native
 3:2 view.

@@ -136,13 +136,14 @@ emitter gaps that close over time. Self-improvement is on by default; set
 
 ## Building from source
 
-An opt-in [overworld widescreen experiment](docs/WIDESCREEN_EXPERIMENT.md)
+The [overworld widescreen experiment](docs/WIDESCREEN_EXPERIMENT.md)
 adds Fit to window, 16:9, 21:9 and 32:9 choices through the Mods catalog. This
 version expands scenery and live NPC visibility. Starting with v0.0.6, Fit also
 fills portrait windows, overworld menus anchor to the viewport edges, and door
 animations retain expanded scenery. Distant object spawning and
 field effects retain the game's original limits; unsupported scenes use the
-original centered view. Mod 0.2.0 is bundled with v0.0.6, disabled by default.
+original centered view. Fresh installations enable the bundled mod with Fit
+to window; existing saved mod choices are preserved.
 
 **Prerequisites (Windows):** [MSYS2](https://www.msys2.org/) with the mingw64
 toolchain (`gcc`/`g++`), CMake 3.16+, Ninja, and SDL2 (mingw64 package). Builds
