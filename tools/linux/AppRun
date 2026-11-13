@@ -18,6 +18,8 @@ DATA="${EMERALDRECOMP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/EmeraldRecomp}"
 SHARE="$HERE/usr/share/emeraldrecomp"
 
 mkdir -p "$DATA/mods/packages"
+mkdir -p "$DATA/variants/emerald"
+cp -n "$SHARE/runtime-game.toml" "$DATA/variants/emerald/game.toml" 2>/dev/null || true
 ln -sfn "$HERE/usr/bin/EmeraldRecomp" "$DATA/EmeraldRecomp"
 ln -sfn "$HERE/usr/bin/assets" "$DATA/assets"
 # New package versions arrive as new <id>/<version> directories; never

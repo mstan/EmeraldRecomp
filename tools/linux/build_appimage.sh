@@ -50,6 +50,10 @@ cp -R "$GAME/mods/preloaded/packages" "$APPDIR/usr/share/emeraldrecomp/mods/pack
 cp "$GAME/LICENSE" "$APPDIR/usr/share/emeraldrecomp/LICENSE"
 cp "$GAME/PERMISSIONS.md" "$APPDIR/usr/share/emeraldrecomp/PERMISSIONS.md"
 python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses"
+mkdir -p "$APPDIR/usr/share/emeraldrecomp/licenses/fonts"
+cp "$GAME"/tools/release-licenses/*.txt "$APPDIR/usr/share/emeraldrecomp/licenses/fonts/"
+# The desktop title has no authored screen override: retain its raw default.
+printf '[video]\nscreen = "raw"\n' > "$APPDIR/usr/share/emeraldrecomp/runtime-game.toml"
 cp "$GAME/tools/linux/README.md" "$APPDIR/usr/share/emeraldrecomp/README.md"
 cat "$GAME/docs/NETPLAY.md" >> "$APPDIR/usr/share/emeraldrecomp/README.md"
 sed -i "s/@VERSION@/${VERSION}/g" "$APPDIR/usr/share/emeraldrecomp/README.md"

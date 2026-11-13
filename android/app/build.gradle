@@ -15,8 +15,8 @@ def recompUiRoot = pick("recompUiRoot", "RECOMP_UI_ROOT", new File(gameRoot, "re
 
 ext.gbaGame = [
     applicationId : "com.mstan.emeraldrecomp",
-    versionCode   : 103,
-    versionName   : "0.1.3",
+    versionCode   : 106,
+    versionName   : "0.1.6",
     title         : "Pokémon Emerald",
     romLabel      : "Pokémon Emerald (USA) ROM",
     romSha1       : ["f3ae088181bf583e55daf962a92bb46f4f1d07b7"],
@@ -24,7 +24,7 @@ ext.gbaGame = [
     romFile       : "emerald_usa.gba",
     biosRequired  : true,
     orientation   : "any",
-    payloadVersion: "2",
+    payloadVersion: "3",
     setupNote     : "Play in portrait or landscape: draw a path to walk, tap menus, " +
                     "long-press for the Start menu.",
     variant       : "emerald",
@@ -32,6 +32,16 @@ ext.gbaGame = [
     payloadDirs   : [
         [from: new File(gameRoot, "mods/preloaded"), into: "mods"],
         [from: new File(rootDir, "payload/mods"), into: "mods"],
+        [from: new File(gameRoot, "tools/release-licenses"), into: "licenses/fonts"],
+        [from: new File(gameRoot, "LICENSE"), into: "licenses/title"],
+        [from: new File(gameRoot, "PERMISSIONS.md"), into: "licenses/title"],
+        [from: new File(engineRoot, "LICENSE"), into: "licenses/gbarecomp"],
+        [from: new File(engineRoot, "external/arm-recomp-core/LICENSE"), into: "licenses/arm-recomp-core"],
+        [from: new File(engineRoot, "external/recomp-net/LICENSE"), into: "licenses/recomp-net"],
+        [from: new File(engineRoot, "external/rbengine/LICENSE"), into: "licenses/rbengine"],
+        [from: new File(engineRoot, "platform/android/third_party/SDL/LICENSE.txt"), into: "licenses/SDL2"],
+        [from: new File(recompUiRoot, "LICENSE"), into: "licenses/recomp-ui"],
+        [from: new File(recompUiRoot, "src/third_party/imgui/LICENSE.txt"), into: "licenses/Dear-ImGui"],
     ],
     gameRoot      : gameRoot,
     engineRoot    : engineRoot,
