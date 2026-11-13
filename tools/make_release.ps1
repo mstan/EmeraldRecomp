@@ -153,7 +153,7 @@ Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G',
     '-DGBARECOMP_BUILD_ORACLE=OFF') 'engine tool configure'
 Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile', '--parallel', "$Jobs") 'gba_recompile build'
 $regen = Invoke-Captured -File (Join-Path $toolBuild 'gba_recompile.exe') -WorkingDirectory (Join-Path $root 'variants\emerald') `
-    -Arguments @('--rom', $Rom, '--config', '--config', 'symbols/BPEE_symbols.toml',
+    -Arguments @('--rom', $Rom, '--config', 'game.toml', '--config', 'symbols/BPEE_symbols.toml',
                  '--config', 'symbols/BPEE_reviewed_seeds.toml', '--symbols', 'symbols/imported_symbols.tsv',
                  '--data-symbols', 'symbols/imported_data_symbols.tsv', '--out', 'generated',
                  '--max-functions', '65536')
@@ -175,7 +175,7 @@ if ($Platforms -contains 'windows') {
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
       "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
-      '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=OFF',
+      '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
       "-DGBARECOMP_GENERATED_BIOS_DIR=$($generatedBiosPath.Replace('\', '/'))",
       "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
