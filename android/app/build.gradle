@@ -33,6 +33,7 @@ ext.gbaGame = [
         [from: new File(gameRoot, "mods/preloaded"), into: "mods"],
         [from: new File(rootDir, "payload/mods"), into: "mods"],
         [from: new File(gameRoot, "tools/release-licenses"), into: "licenses/fonts"],
+        [from: new File(gameRoot, "tools/android-licenses"), into: "licenses/Android-NDK"],
         [from: new File(gameRoot, "LICENSE"), into: "licenses/title"],
         [from: new File(gameRoot, "PERMISSIONS.md"), into: "licenses/title"],
         [from: new File(engineRoot, "LICENSE"), into: "licenses/gbarecomp"],
