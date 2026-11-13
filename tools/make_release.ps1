@@ -341,7 +341,9 @@ if ($Platforms -contains 'linux') {
         '--version', $Version, '--game', (Get-WslPath $root), '--engine', (Get-WslPath $EngineRoot),
         '--ui', (Get-WslPath $RecompUiRoot), '--out', (Get-WslPath $out),
         '--private', (Get-WslPath $private), '--generated-bios', (Get-WslPath $generatedBiosPath),
-        '--engine-rev', ((git -C $EngineRoot rev-parse --short=12 HEAD).Trim()), '--jobs', "$Jobs") 'linux AppImage build'
+        '--engine-rev', ((git -C $EngineRoot rev-parse HEAD).Trim()),
+        '--title-rev', ((git -C $root rev-parse HEAD).Trim()),
+        '--ui-rev', ((git -C $RecompUiRoot rev-parse HEAD).Trim()), '--jobs', "$Jobs") 'linux AppImage build'
   } finally { Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue }
   $appimage = Join-Path $out "EmeraldRecomp-linux-x86_64-v$Version.AppImage"
   if (-not (Test-Path $appimage)) { throw "AppImage missing: $appimage" }
