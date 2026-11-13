@@ -12,6 +12,10 @@ p.add_argument('engine', type=Path)
 p.add_argument('ui', type=Path)
 p.add_argument('output', type=Path)
 p.add_argument('--mingw', type=Path)
+p.add_argument('--title-revision')
+p.add_argument('--engine-revision')
+p.add_argument('--ui-revision')
+p.add_argument('--title-url')
 a = p.parse_args()
 a.output.mkdir(parents=True, exist_ok=True)
 sources = {
@@ -60,12 +64,14 @@ git = 'C:/Program Files/Git/cmd/git.exe' if Path('C:/Program Files/Git/cmd/git.e
 title = Path(__file__).resolve().parents[1]
 source_lines = ['# Source identities', '',
                 'The title and pinned dependencies include their build scripts. Supply your own ROM/BIOS to regenerate the game corpus.', '']
-for label, root, url in (
-    ('Title', title, None),
-    ('Engine', a.engine, 'https://github.com/mstan/gbarecomp'),
-    ('Launcher', a.ui, 'https://github.com/RetroPortingToolKit/recomp-ui'),
+for label, root, url, revision in (
+    ('Title', title, a.title_url, a.title_revision),
+    ('Engine', a.engine, 'https://github.com/mstan/gbarecomp', a.engine_revision),
+    ('Launcher', a.ui, 'https://github.com/RetroPortingToolKit/recomp-ui', a.ui_revision),
 ):
-    head = subprocess.check_output([git, '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    head = revision or subprocess.check_output([git, '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    if len(head) != 40 or any(c not in '0123456789abcdef' for c in head):
+        raise RuntimeError('Source identity must be a full Git revision')
     if url is None:
         for remote in ('origin', 'mstan'):
             candidate = subprocess.run([git, '-C', str(root), 'config', '--get', f'remote.{remote}.url'], text=True, capture_output=True)

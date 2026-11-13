@@ -49,7 +49,9 @@ cp -R /build/emerald/assets "$APPDIR/usr/bin/assets"
 cp -R "$GAME/mods/preloaded/packages" "$APPDIR/usr/share/emeraldrecomp/mods/packages"
 cp "$GAME/LICENSE" "$APPDIR/usr/share/emeraldrecomp/LICENSE"
 cp "$GAME/PERMISSIONS.md" "$APPDIR/usr/share/emeraldrecomp/PERMISSIONS.md"
-python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses"
+python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses" \
+    --title-revision "${TITLE_REV:?TITLE_REV is required}" --title-url https://github.com/mstan/EmeraldRecomp \
+    --engine-revision "$ENGINE_REV" --ui-revision "${UI_REV:?UI_REV is required}"
 mkdir -p "$APPDIR/usr/share/emeraldrecomp/licenses/fonts"
 cp "$GAME"/tools/release-licenses/*.txt "$APPDIR/usr/share/emeraldrecomp/licenses/fonts/"
 # The desktop title has no authored screen override: retain its raw default.

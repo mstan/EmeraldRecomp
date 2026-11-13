@@ -61,8 +61,11 @@ if [[ -n "$PRIVATE" ]]; then
     MOUNTS+=(-v "$PRIV_STAGE:/private:ro")
 fi
 # Build as the invoking user so /out stays owned by them.
-[[ -n "$ENGINE_REV" ]] || ENGINE_REV="$(git -C "$ENGINE" rev-parse --short=12 HEAD)"
+[[ -n "$ENGINE_REV" ]] || ENGINE_REV="$(git -C "$ENGINE" rev-parse HEAD)"
+TITLE_REV="$(git -C "$GAME" rev-parse HEAD)"
+UI_REV="$(git -C "$UI" rev-parse HEAD)"
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e VERSION="$VERSION" -e JOBS="$JOBS" \
     -e ENGINE_REV="$ENGINE_REV" \
+    -e TITLE_REV="$TITLE_REV" -e UI_REV="$UI_REV" \
     -v "$CACHE:/build" "${MOUNTS[@]}" "$IMAGE" \
     nice -n 10 bash /src/game/tools/linux/build_appimage.sh
