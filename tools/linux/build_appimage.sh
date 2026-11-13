@@ -27,7 +27,7 @@ ninja -C /build/sdl -j "$JOBS" install > /build/sdl-build.log 2>&1 || { tail -40
 
 echo "== EmeraldRecomp"
 cmake -S "$GAME" -B /build/emerald -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG" -DGBARECOMP_NETPLAY=ON -DCMAKE_PREFIX_PATH=/build/sdl-install \
+    "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG" -DGBARECOMP_NETPLAY=ON -DGBARECOMP_GPU_HD_EXPERIMENT=ON -DCMAKE_PREFIX_PATH=/build/sdl-install \
     -DGBARECOMP_ROOT="$ENGINE" -DRECOMP_UI_ROOT="$UI" -DGBARECOMP_RUNTIME_UI_ROOT="$UI" \
     -DGBARECOMP_GENERATED_BIOS_DIR=/src/bios \
     -DGBARECOMP_BUILD_ORACLE=OFF -DGBARECOMP_ENGINE_REVISION="${ENGINE_REV:?ENGINE_REV is required}" \
@@ -49,7 +49,13 @@ cp -R /build/emerald/assets "$APPDIR/usr/bin/assets"
 cp -R "$GAME/mods/preloaded/packages" "$APPDIR/usr/share/emeraldrecomp/mods/packages"
 cp "$GAME/LICENSE" "$APPDIR/usr/share/emeraldrecomp/LICENSE"
 cp "$GAME/PERMISSIONS.md" "$APPDIR/usr/share/emeraldrecomp/PERMISSIONS.md"
-python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses"
+python3 "$GAME/tools/collect_licenses.py" "$ENGINE" "$UI" "$APPDIR/usr/share/emeraldrecomp/licenses" \
+    --title-revision "${TITLE_REV:?TITLE_REV is required}" --title-url https://github.com/mstan/EmeraldRecomp \
+    --engine-revision "$ENGINE_REV" --ui-revision "${UI_REV:?UI_REV is required}"
+mkdir -p "$APPDIR/usr/share/emeraldrecomp/licenses/fonts"
+cp "$GAME"/tools/release-licenses/*.txt "$APPDIR/usr/share/emeraldrecomp/licenses/fonts/"
+# The desktop title has no authored screen override: retain its raw default.
+printf '[video]\nscreen = "raw"\n' > "$APPDIR/usr/share/emeraldrecomp/runtime-game.toml"
 cp "$GAME/tools/linux/README.md" "$APPDIR/usr/share/emeraldrecomp/README.md"
 cat "$GAME/docs/NETPLAY.md" >> "$APPDIR/usr/share/emeraldrecomp/README.md"
 sed -i "s/@VERSION@/${VERSION}/g" "$APPDIR/usr/share/emeraldrecomp/README.md"

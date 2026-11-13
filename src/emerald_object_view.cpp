@@ -157,6 +157,53 @@ void ObjectView::dormant(const ViewMemory& m, const FieldView& field) {
     }
 }
 
+void ObjectView::weather(const ViewMemory& m) {
+    // USA Weather.sprites.s2.fogHSprites and current/loaded weather fields,
+    // described by the pinned pokeemerald field_weather.h. The guest owns
+    // weather, scrolling, animation, palettes and blend coefficients.
+    constexpr unsigned weather = 0x02038454;
+    const auto* state = m.bytes(weather + 0x6d0, 3);
+    if (!state || state[0] != 6 || !state[2]) return;
+    const auto sprite = m.u32(weather + 0xa0);
+    if (sprite < kSprites || sprite >= kSprites + 64*68 || (sprite-kSprites)%68) return;
+    const auto* s = m.bytes(sprite,68);
+    if (!s || !(s[62]&1) || (u16(s)&0xff00)!=0x0400 ||
+        (u16(s+2)&0xc000)!=0xc000) return;
+    const unsigned a2 = u16(s+4), priority = (a2>>10)&3;
+    int count=0, order=-1, origin_x=0, origin_y=0;
+    unsigned flip=0;
+    for (int i=0;i<128;++i) {
+        const auto* hw=m.oam+i*8;
+        const unsigned a0=u16(hw),a1=u16(hw+2);
+        if ((a0&0xff00)!=0x0400 || (a1&0xc000)!=0xc000 || u16(hw+4)!=a2) continue;
+        int x=a1&511,y=a0&255;
+        if (x>=256) x-=512;
+        if (y>=160) y-=256;
+        if (!count) { order=i;origin_x=x;origin_y=y;flip=a1&0x3000; }
+        else if (((x-origin_x)&63) || ((y-origin_y)&63) || (a1&0x3000)!=flip) return;
+        ++count;
+    }
+    // Only extend the verified, complete 5x4 grid of identical 64px fog
+    // sprites. Repeating its original tile pattern adds no synthetic art.
+    if (count!=20) return;
+    const bool mapping_1d=(u16(m.io)&0x40)!=0;
+    for (int y=top_;y<top_+height_;++y) for (int x=left_;x<left_+width_;++x) {
+        if (x>=0 && x<240 && y>=0 && y<160) continue;
+        auto& dest=pixels_[(y-top_)*width_+x-left_];
+        if (!(dest.color&0x8000) && dest.priority*256+dest.order<=priority*256+unsigned(order)) continue;
+        int tx=(x-origin_x)&63,ty=(y-origin_y)&63;
+        if (flip&0x1000) tx=63-tx;
+        if (flip&0x2000) ty=63-ty;
+        const unsigned tile=(a2&1023)+(ty/8)*(mapping_1d?8:32)+tx/8;
+        const unsigned offset=0x10000+tile*32+(ty&7)*4+(tx&7)/2;
+        if (offset>=0x18000) return;
+        const unsigned index=(m.vram[offset]>>((tx&1)*4))&15;
+        if (!index) continue;
+        dest={static_cast<std::uint16_t>(u16(m.pal+0x200+(a2>>12)*32+index*2)&0x7fff),
+              static_cast<std::uint8_t>(priority),static_cast<std::uint8_t>(order),true};
+    }
+}
+
 bool ObjectView::prepare(const ViewMemory& m, const FieldView& field, int width, int height) {
     ready_ = false;
     objects_ = verified_parts_ = 0;
@@ -295,6 +342,7 @@ bool ObjectView::prepare(const ViewMemory& m, const FieldView& field, int width,
         }
     }
     dormant(m, field);
+    weather(m);
     ready_ = true;
     return true;
 }

@@ -70,6 +70,41 @@ struct Fixture {
 
 int main() {
     {
+        Fixture fog;
+        std::vector<std::uint8_t> oam(0x400),pal(0x400);
+        auto memory=fog.memory();memory.oam=oam.data();memory.pal=pal.data();
+        fog.reg(0,0x1e40);
+        fog.ewram[0x38454+0x6d0]=6;
+        fog.ewram[0x38454+0x6d2]=1;
+        fog.dword(0x02038454+0xa0,0x02020630);
+        fog.word(0x02020630,0x0400);fog.word(0x02020632,0xc000);
+        fog.word(0x02020634,0x0800);fog.word(0x02020630+62,1);
+        for(int i=0;i<20;++i) {
+            const unsigned a0=0x0400|((-40+(i/5)*64)&255);
+            const unsigned a1=0xc000|((-16+(i%5)*64)&511);
+            for(int k=0;k<3;++k) {
+                const unsigned value=k==0?a0:k==1?a1:0x0800;
+                oam[i*8+k*2]=value;oam[i*8+k*2+1]=value>>8;
+            }
+        }
+        std::fill_n(fog.vram.begin()+0x10000,2048,0x11);pal[0x202]=31;
+        emerald::FieldView field;auto objects=std::make_unique<emerald::ObjectView>();
+        require(field.prepare(memory,569)==ViewStatus::Ready,"fog fixture field failed");
+        require(objects->prepare(memory,field,569),"fog grid rejected");
+        int left,width;const auto* row=objects->row(8,&left,&width);
+        require(row && row[-17-left].color==31 && row[-17-left].semi_transparent,
+                "fog pattern/alpha missing from extended margin");
+        require(row[-left].color==0x8000,"fog provider changed native viewport");
+        ++oam[2];
+        require(objects->prepare(memory,field,569),"unsupported fog grid invalidated ordinary objects");
+        row=objects->row(8,&left,&width);
+        require(row[-17-left].color==0x8000,"mismatched fog grid was synthesized");
+        --oam[2];fog.ewram[0x38454+0x6d0]=2;
+        require(objects->prepare(memory,field,569),"clear weather invalidated ordinary objects");
+        row=objects->row(8,&left,&width);
+        require(row[-17-left].color==0x8000,"fog persisted after weather changed");
+    }
+    {
         Fixture npc;
         npc.rom.resize(0x600000);
         npc.dword(0x08000100, 25); npc.dword(0x08000104, 18);

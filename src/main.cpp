@@ -95,6 +95,7 @@ int emerald_main(int argc, char** argv) {
     // a sibling game.toml. The asset picker still validates against these
     // values; CLI / TOML can override.
     gbarecomp::RunOptions opts;
+    opts.launcher_game_version = GBARECOMP_GAME_VERSION;
 #if defined(GBAGAME_NETPLAY)
     opts.netplay=gbarecomp::make_gba_netplay_launch("emerald-usa",GBARECOMP_NETPLAY_BUILD_ID,
         "a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af",emerald::setup_link_instance);

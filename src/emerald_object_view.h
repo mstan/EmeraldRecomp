@@ -24,5 +24,6 @@ private:
     std::uint32_t last_tick_ = 0;
     int dormant_objects_ = 0;
     void dormant(const ViewMemory& memory, const FieldView& field);
+    void weather(const ViewMemory& memory);
 };
 } // namespace emerald
