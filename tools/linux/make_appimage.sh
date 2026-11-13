@@ -47,7 +47,9 @@ mkdir -p "$STAGE"
 EXCLUDES=(--exclude '.git' --exclude 'build/' --exclude 'build-*/' --exclude 'release-stage/'
           --exclude 'recomp_cache/' --exclude '*.gba' --exclude '*.sav' --exclude '*.state*'
           --exclude 'gba_bios.bin' --exclude 'android/app/build/' --exclude 'android/build/'
-          --exclude 'android/.gradle/' --exclude 'android/app/.cxx/')
+          --exclude 'android/.gradle/' --exclude 'android/app/.cxx/'
+          --exclude 'android/signing.local.properties' --exclude 'android/local.properties'
+          --exclude '*.jks' --exclude '*.keystore')
 rsync -a --copy-dirlinks --delete "${EXCLUDES[@]}" --exclude '/gbarecomp/' --exclude '/recomp-ui/' --exclude 'third_party/pokeemerald/' --exclude 'docs/screenshots/' \
     "$GAME/" "$STAGE/game/"
 rsync -a --copy-dirlinks --delete "${EXCLUDES[@]}" --exclude 'tools/gbaref/' --exclude 'oracle/' "$ENGINE/" "$STAGE/engine/"
