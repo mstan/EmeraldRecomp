@@ -176,6 +176,7 @@ if ($Platforms -contains 'windows') {
       "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
       '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
+      '-DGBARECOMP_GPU_HD_EXPERIMENT=ON',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
       "-DGBARECOMP_GENERATED_BIOS_DIR=$($generatedBiosPath.Replace('\', '/'))",
       "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
