@@ -153,7 +153,7 @@ Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G',
     '-DGBARECOMP_BUILD_ORACLE=OFF') 'engine tool configure'
 Invoke-Native "$MingwBin\cmake.exe" @('--build', $toolBuild, '--target', 'gba_recompile', '--parallel', "$Jobs") 'gba_recompile build'
 $regen = Invoke-Captured -File (Join-Path $toolBuild 'gba_recompile.exe') -WorkingDirectory (Join-Path $root 'variants\emerald') `
-    -Arguments @('--rom', $Rom, '--config', 'game.toml', '--config', 'symbols/BPEE_symbols.toml',
+    -Arguments @('--rom', $Rom, '--config', '--config', 'symbols/BPEE_symbols.toml',
                  '--config', 'symbols/BPEE_reviewed_seeds.toml', '--symbols', 'symbols/imported_symbols.tsv',
                  '--data-symbols', 'symbols/imported_data_symbols.tsv', '--out', 'generated',
                  '--max-functions', '65536')
@@ -175,7 +175,7 @@ if ($Platforms -contains 'windows') {
   Invoke-Native "$MingwBin\cmake.exe" @('-S', $root, '-B', $build, '-G', 'Ninja',
       "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
       "-DCMAKE_MAKE_PROGRAM=$MingwBin/ninja.exe", '-DCMAKE_BUILD_TYPE=Release',
-      '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=ON',
+      '-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG', '-DGBARECOMP_BUILD_ORACLE=OFF', '-DGBARECOMP_NETPLAY=OFF',
       "-DGBARECOMP_ROOT=$($EngineRoot.Replace('\', '/'))",
       "-DGBARECOMP_GENERATED_BIOS_DIR=$($generatedBiosPath.Replace('\', '/'))",
       "-DRECOMP_UI_ROOT=$($RecompUiRoot.Replace('\', '/'))",
@@ -195,7 +195,16 @@ if ($Platforms -contains 'windows') {
   $stageName = "EmeraldRecomp-windows-x64-v$Version"
   $stage = Join-Path $out $stageName
   Assert-ChildPath $stage $out
-  if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+  if (Test-Path -LiteralPath $stage) {
+    $resolvedStage = (Resolve-Path -LiteralPath $stage).Path
+    $stageItems = @(Get-Item -LiteralPath $resolvedStage) +
+        @(Get-ChildItem -LiteralPath $resolvedStage -Recurse -Force)
+    if ($stageItems | Where-Object {
+        ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        $_.Name -eq '.git'
+    }) { throw 'Refusing to remove a stage containing a link or repository.' }
+    Remove-Item -LiteralPath $resolvedStage -Recurse
+  }
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item $exe $stage
   foreach ($d in @('SDL2.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll')) {
@@ -208,6 +217,24 @@ if ($Platforms -contains 'windows') {
   Copy-Item -LiteralPath (Join-Path $root 'mods\preloaded') -Destination (Join-Path $stage 'mods') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'PERMISSIONS.md') -Destination $stage
+# Preserve only the authored runtime display model, not development metadata.
+$sourceToml = [IO.File]::ReadAllText((Join-Path $root 'variants/emerald/game.toml'))
+$video = [regex]::Match($sourceToml, '(?ms)^\[video\]\s*\r?\n(.*?)(?=^\[|\z)')
+$screen = [regex]::Match($video.Groups[1].Value,
+    '(?m)^\s*screen\s*=\s*"([A-Za-z0-9_-]+)"\s*(?:#.*)?$')
+# No authored video.screen retains the runner's raw default.
+$screenName = if ($screen.Success) { $screen.Groups[1].Value } else { 'raw' }
+$runtimeConfig = "[video]`nscreen = `"$screenName`"`n"
+$runtimeConfigPath = Join-Path $stage 'variants/emerald/game.toml'
+New-Item -ItemType Directory -Force -Path (Split-Path $runtimeConfigPath) | Out-Null
+[IO.File]::WriteAllText($runtimeConfigPath, $runtimeConfig)
+$fontNotices = @('LatoLatin-OFL.txt', 'NotoSansSymbols2-OFL.txt', 'OpenMoji-LICENSE.txt')
+$fontNoticeStage = Join-Path $stage 'licenses/fonts'
+New-Item -ItemType Directory -Force -Path $fontNoticeStage | Out-Null
+foreach ($notice in $fontNotices) {
+    Copy-Item -LiteralPath (Join-Path $root "tools/release-licenses/$notice") -Destination $fontNoticeStage
+}
+
   Invoke-Native (Get-Command python.exe).Source @((Join-Path $root 'tools\collect_licenses.py'),
       $EngineRoot, $RecompUiRoot, (Join-Path $stage 'licenses'), '--mingw', (Split-Path $MingwBin)) 'dependency notices'
   # Self-contained tcc overlay toolchain so toolchain-less players self-heal

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(EmeraldRecomp VERSION 0.1.5 LANGUAGES C CXX)
+project(EmeraldRecomp VERSION 0.1.6 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
@@ -129,6 +129,7 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         "-Wl,--end-group")
 
     target_compile_definitions(${TARGET} PRIVATE
+        GBARECOMP_GAME_VERSION="${PROJECT_VERSION}"
         GBARECOMP_DEFAULT_DEBUG_PORT=${PORT}
         GBARECOMP_WINDOW_TITLE="${WIN_TITLE}"
         GBARECOMP_DEFAULT_GAME_CONFIG="variants/${NAME}/game.toml"
