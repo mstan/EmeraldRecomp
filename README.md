@@ -210,3 +210,9 @@ this project is an unaffiliated, non-commercial preservation and research effort
 <p align="center">
   <a href="https://discord.gg/Ad9BwSzctP"><img src=".github/raid-discord.png" alt="Join the Retro AI Development (R.A.I.D.) Discord" width="200"></a>
 </p>
+
+## RecompLauncher
+
+The release manifest starts the Windows executable or Linux AppImage with your
+Pokémon Emerald USA ROM through `--rom`. Choose your own GBA BIOS in the game
+setup on first launch.
