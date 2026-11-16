@@ -1,0 +1,26 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "game": {
+        "kind": "iso",
+        "label": "Your Pokémon Emerald (USA) GBA ROM, the .gba file (SHA-1 f3ae088181bf583e55daf962a92bb46f4f1d07b7).",
+        "check": {
+            "ids": [
+                "BPEE"
+            ]
+        }
+    },
+    "start": {
+        "program": [
+            "EmeraldRecomp.exe",
+            "EmeraldRecomp"
+        ],
+        "args": [
+            "--rom",
+            "{game}"
+        ]
+    },
+    "requires": [
+        "start"
+    ]
+}
