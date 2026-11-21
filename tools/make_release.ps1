@@ -218,6 +218,7 @@ if ($Platforms -contains 'windows') {
   Copy-Item -LiteralPath (Join-Path $root 'mods\preloaded') -Destination (Join-Path $stage 'mods') -Recurse
   Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
   Copy-Item -LiteralPath (Join-Path $root 'PERMISSIONS.md') -Destination $stage
+  Copy-Item -LiteralPath (Join-Path $root 'recomplauncher.json') -Destination $stage
 # Preserve only the authored runtime display model, not development metadata.
 $sourceToml = [IO.File]::ReadAllText((Join-Path $root 'variants/emerald/game.toml'))
 $video = [regex]::Match($sourceToml, '(?ms)^\[video\]\s*\r?\n(.*?)(?=^\[|\z)')

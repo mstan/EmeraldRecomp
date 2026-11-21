@@ -1,0 +1,29 @@
+{
+    "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+    "format": 1,
+    "game": {
+        "kind": "iso",
+        "label": "Your Pokémon Emerald (USA) ROM (.gba).",
+        "dumps": [
+            {
+                "name": "USA",
+                "crc32": "1f1c08fb"
+            }
+        ]
+    },
+    "start": {
+        "program": [
+            "EmeraldRecomp.exe",
+            "EmeraldRecomp.AppImage",
+            "EmeraldRecomp"
+        ],
+        "args": [
+            "--rom",
+            "{game}"
+        ]
+    },
+    "requires": [
+        "start"
+    ],
+    "name": "Pokémon Emerald (Recompiled)"
+}
