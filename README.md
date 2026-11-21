@@ -78,6 +78,21 @@ The runtime **refuses to launch on an unrecognized ROM** — the SHA-1 must matc
 4. Play. Early on you may briefly see the interpreter warm up new code paths; once
    warmed (and cached), they run native.
 
+## Android saved games
+
+Use **Saved game** on the launch screen to import or export a raw `.sav` file
+with Android's file picker. Quit the game to return to that screen. If setup
+is normally skipped, press and hold the app icon and choose **Saved game**
+on launchers that support app shortcuts.
+
+Import accepts a 128 KiB Emerald native save and keeps the previous save as
+an exportable backup. Execution save states are separate. Save transfers stay
+locked while the game is running, including while it is backgrounded.
+
+**Mods → Gameplay Diagnostics → Record Gameplay** controls the bounded local
+troubleshooting recorder. It starts enabled and remembers your choice
+independently of adaptive widescreen.
+
 ## Multiplayer: Link Cable and Wireless Adapter
 
 EmeraldRecomp supports **two-player Emerald ↔ Emerald netplay** with a virtual

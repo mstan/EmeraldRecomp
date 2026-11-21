@@ -149,6 +149,7 @@ int emerald_main(int argc, char** argv) {
         opts.resume_suspend_state_on_launch = true;
         opts.ui_touch_friendly = true;
         opts.touch_pad_default = 0;
+        opts.launcher_native_save_managed_externally = true;
     }
 
     std::vector<char*> av;
