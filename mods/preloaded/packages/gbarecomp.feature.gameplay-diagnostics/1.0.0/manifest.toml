@@ -1,0 +1,20 @@
+format_version = 1
+id = "gbarecomp.feature.gameplay-diagnostics"
+version = "1.0.0"
+name = "Gameplay Diagnostics"
+author = "gbarecomp contributors"
+description = "Record bounded local gameplay diagnostics to help investigate problems."
+license = "MIT"
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "pokemon-emerald-us"
+rom_sha1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"
+
+[[feature]]
+id = "record-gameplay"
+name = "Record Gameplay"
+description = "Save a bounded rolling record of inputs and game state for troubleshooting. Turn this off to stop recording. Your choice is remembered."
+group = "Diagnostics"
+default_enabled = true
