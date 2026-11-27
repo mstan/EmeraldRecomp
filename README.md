@@ -43,6 +43,14 @@ Its Gen3 siblings live in
 
 ---
 
+### Viewport sizes
+
+#### Emerald
+
+| Original | Landscape | Portrait |
+| --- | --- | --- |
+| ![Emerald — Original](docs/screenshots/emerald-normal.png) | ![Emerald — Landscape](docs/screenshots/emerald-landscape.png) | ![Emerald — Portrait](docs/screenshots/emerald-portrait.png) |
+
 ## What "static recompilation" means here
 
 The ROM's **ARM7TDMI machine code is statically translated to native C** — every
