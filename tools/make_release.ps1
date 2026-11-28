@@ -134,7 +134,7 @@ function Get-WslPath([string]$Path) {
   '/mnt/' + $full.Substring(0, 1).ToLowerInvariant() + $full.Substring(2).Replace('\', '/')
 }
 
-# ── 1. Pins ────────────────────────────────────────────────────────────────
+# â”€â”€ 1. Pins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (-not $AllowDirty) {
   $selfDirty = @(git -C $root status --porcelain --untracked-files=no)
   if ($selfDirty.Count) { throw "EmeraldRecomp has uncommitted changes:`n$($selfDirty -join "`n")" }
@@ -145,7 +145,7 @@ Assert-Pinned -Checkout $RecompUiRoot -Gitlink 'recomp-ui' -InputPaths @('.')
 $romSha = (Get-FileHash -Algorithm SHA1 -LiteralPath $Rom).Hash.ToLowerInvariant()
 if ($romSha -ne 'f3ae088181bf583e55daf962a92bb46f4f1d07b7') { throw "ROM SHA-1 $romSha is not Emerald (USA)" }
 
-# ── 2. Recompile ───────────────────────────────────────────────────────────
+# â”€â”€ 2. Recompile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $toolBuild = if ([IO.Path]::IsPathRooted($EngineToolBuildDir)) { [IO.Path]::GetFullPath($EngineToolBuildDir) } else { Join-Path $root $EngineToolBuildDir }
 Invoke-Native "$MingwBin\cmake.exe" @('-S', $EngineRoot, '-B', $toolBuild, '-G', 'Ninja',
     "-DCMAKE_C_COMPILER=$MingwBin/gcc.exe", "-DCMAKE_CXX_COMPILER=$MingwBin/g++.exe",
@@ -161,7 +161,7 @@ $regen.Output | Out-File (Join-Path $toolBuild 'regen.log') -Encoding utf8
 if ($regen.ExitCode -ne 0) { $regen.Output; throw "gba_recompile failed ($($regen.ExitCode))" }
 [regex]::Matches($regen.Output, '==> discovered .*') | ForEach-Object { Write-Host $_.Value }
 
-# ── 3. Windows ─────────────────────────────────────────────────────────────
+# â”€â”€ 3. Windows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (-not $GeneratedBiosDir) { $GeneratedBiosDir = Join-Path $EngineRoot 'src\runtime\generated_bios' }
   $generatedBiosPath = (Resolve-Path -LiteralPath $GeneratedBiosDir).Path
   foreach ($name in @('bios_recompiled.cpp', 'bios_recompiled.h', 'bios_dispatch_table.cpp', 'bios_symbol_map.cpp')) {
@@ -237,13 +237,13 @@ foreach ($notice in $fontNotices) {
     Copy-Item -LiteralPath (Join-Path $root "tools/release-licenses/$notice") -Destination $fontNoticeStage
 }
 
-  Invoke-Native (Get-Command python.exe).Source @((Join-Path $root 'tools\collect_licenses.py'),
-      $EngineRoot, $RecompUiRoot, (Join-Path $stage 'licenses'), '--mingw', (Split-Path $MingwBin)) 'dependency notices'
   # Self-contained tcc overlay toolchain so toolchain-less players self-heal
   # overlay gaps (see gbarecomp/tools/fetch_tcc.ps1).
   Assert-ChildPath (Join-Path $EngineRoot 'tools\_toolchain_cache\tcc_extract') $EngineRoot
   Assert-ChildPath (Join-Path $stage 'overlay_toolchain\tcc') $stage
   & (Join-Path $EngineRoot 'tools\fetch_tcc.ps1') -Toolchain (Join-Path $stage 'overlay_toolchain') -EngineRoot $EngineRoot
+  Invoke-Native (Get-Command python.exe).Source @((Join-Path $root 'tools\collect_licenses.py'),
+      $EngineRoot, $RecompUiRoot, (Join-Path $stage 'licenses'), '--mingw', (Split-Path $MingwBin), '--build-dir', $build) 'dependency notices'
 
   @"
 # Pokemon Emerald - GBA static recompilation (Windows x64) v$Version
@@ -328,7 +328,7 @@ See the GitHub release notes for what changed in v$Version.
   Write-Host "windows: $zip"
 }
 
-# ── 4. Linux AppImage ──────────────────────────────────────────────────────
+# â”€â”€ 4. Linux AppImage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if ($Platforms -contains 'linux') {
   # Private assets for the container smoke test: a scratch copy, mounted
   # read-only, deleted afterwards. They never enter the image.
@@ -353,7 +353,7 @@ if ($Platforms -contains 'linux') {
   Write-Host "linux: $appimage"
 }
 
-# ── 5. Android ─────────────────────────────────────────────────────────────
+# â”€â”€ 5. Android â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if ($Platforms -contains 'android') {
   $parts = $Version.Split('.') | ForEach-Object { [int]$_ }
   $previousGeneratedBios = $env:GBARECOMP_GENERATED_BIOS_DIR
@@ -413,7 +413,7 @@ if ($Platforms -contains 'android') {
   Write-Host "android: $apk"
 }
 
-# ── Checksums ──────────────────────────────────────────────────────────────
+# â”€â”€ Checksums â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Every artifact of this version in release-stage (a partial -Platforms run
 # keeps the others' checksums).
 $all = @(Get-ChildItem -LiteralPath $out -File |
