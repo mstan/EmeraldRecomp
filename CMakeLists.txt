@@ -42,7 +42,6 @@ endif()
 
 add_subdirectory("${GBARECOMP_ROOT}" gbarecomp_build EXCLUDE_FROM_ALL)
 
-add_executable(verify_rom_hash tools/verify_rom_hash/main.cpp)
 
 enable_testing()
 add_executable(emerald_extended_view_test
@@ -63,14 +62,8 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
     if(GBA_GAME_GENERATED_ROOT)
         set(VARIANT_GENERATED_DIR "${GBA_GAME_GENERATED_ROOT}")
     endif()
-    if(EXISTS "${VARIANT_GENERATED_DIR}/recompiled.cpp")
-        message(FATAL_ERROR
-            "${NAME}: stale monolithic generated/recompiled.cpp found. "
-            "Regenerate with the current gba_recompile before building.")
-    endif()
-    file(GLOB VARIANT_GENERATED CONFIGURE_DEPENDS
-        "${VARIANT_GENERATED_DIR}/*.c"
-        "${VARIANT_GENERATED_DIR}/*.cpp")
+    gbarecomp_collect_generated_sources(VARIANT_GENERATED
+        DIRECTORY "${VARIANT_GENERATED_DIR}")
 
     set(VARIANT_GAME_SOURCES src/main.cpp)
     if(GBARECOMP_ENABLE_MODS)
@@ -120,13 +113,7 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
         "${GBARECOMP_ROOT}/src/debug"
         src)
 
-    target_link_libraries(${TARGET} PRIVATE
-        "-Wl,--start-group"
-        gbarecomp_runtime
-        gbarecomp_debug
-        gbarecomp_gba
-        gbarecomp_armv4t
-        "-Wl,--end-group")
+    gbarecomp_target_runtime(${TARGET})
 
     target_compile_definitions(${TARGET} PRIVATE
         GBARECOMP_GAME_VERSION="${PROJECT_VERSION}"
@@ -163,11 +150,7 @@ function(add_gba_variant TARGET NAME PORT WIN_TITLE GAME_NAME ROM_SHA1 ROM_CRC32
 
     # 256 MB stack reserve — see FireRedRecomp/CMakeLists.txt rationale
     # (Win64 SEH unwind table scales with ~90k recompiled functions).
-    if(MSVC)
-        target_link_options(${TARGET} PRIVATE /STACK:268435456)
-    elseif(MINGW OR WIN32)
-        target_link_options(${TARGET} PRIVATE -Wl,--stack,268435456)
-    endif()
+    gbarecomp_target_link_host_stack(${TARGET} PRIVATE 268435456)
 endfunction()
 
 # ─────────────────────────────────────────────────────────────────────
